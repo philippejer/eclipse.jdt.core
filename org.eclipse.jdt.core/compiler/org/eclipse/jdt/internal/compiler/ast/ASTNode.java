@@ -1215,4 +1215,6 @@ public static void resolveDeprecatedAnnotations(BlockScope scope, Annotation[] a
 	public void traverse(ASTVisitor visitor, BlockScope scope) {
 		// do nothing by default
 	}
+	
+	public ASTNode generatedBy = null;
 }

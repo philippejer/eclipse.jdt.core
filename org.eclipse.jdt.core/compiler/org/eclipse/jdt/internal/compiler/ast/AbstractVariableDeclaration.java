@@ -145,4 +145,7 @@ public abstract class AbstractVariableDeclaration extends Statement implements I
 	public void setFieldIndex(int depth) {
 		// do nothing by default
 	}
+	
+	public Expression initializationCopy = null;
+	public Expression collectionCopy = null;
 }

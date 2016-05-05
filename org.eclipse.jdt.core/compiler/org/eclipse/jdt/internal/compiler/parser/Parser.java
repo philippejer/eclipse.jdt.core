@@ -41,6 +41,8 @@ import java.util.Properties;
 
 import org.eclipse.jdt.core.compiler.CharOperation;
 import org.eclipse.jdt.core.compiler.InvalidInputException;
+import org.eclipse.jdt.core.extensions.ExtensionsConfig;
+import org.eclipse.jdt.core.internal.compiler.extensions.ExtensionsUtil;
 import org.eclipse.jdt.internal.compiler.ASTVisitor;
 import org.eclipse.jdt.internal.compiler.CompilationResult;
 import org.eclipse.jdt.internal.compiler.ast.AND_AND_Expression;
@@ -3383,6 +3385,11 @@ protected void consumeEnhancedForStatementHeader(){
 			this.lastErrorEndPositionBeforeRecovery < this.scanner.currentPosition) {
 		problemReporter().invalidUsageOfForeachStatements(statement.elementVariable, collection);
 	}
+
+	if (ExtensionsConfig.ENABLE_VAR) {
+		ExtensionsUtil.log("Parser.consumeEnhancedForStatementHeader: statement: " + ExtensionsUtil.logObject(statement));
+		statement.elementVariable.collectionCopy = collection;
+	}
 }
 protected void consumeEnhancedForStatementHeaderInit(boolean hasModifiers) {
 	TypeReference type;
@@ -4055,6 +4062,11 @@ protected void consumeExitVariableWithInitialization() {
 	variableDecl.declarationEnd = variableDecl.initialization.sourceEnd;
 
 	recoveryExitFromVariable();
+
+	if (ExtensionsConfig.ENABLE_VAR) {
+		ExtensionsUtil.log("Parser.consumeExitVariableWithInitialization: variableDecl: " + ExtensionsUtil.logObject(variableDecl));
+		variableDecl.initializationCopy = variableDecl.initialization;
+	}
 }
 protected void consumeExitVariableWithoutInitialization() {
 	// ExitVariableWithoutInitialization ::= $empty
