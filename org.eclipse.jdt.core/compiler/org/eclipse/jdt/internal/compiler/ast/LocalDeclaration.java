@@ -38,6 +38,8 @@ import static org.eclipse.jdt.internal.compiler.ast.ExpressionContext.ASSIGNMENT
 
 import java.util.List;
 
+import org.eclipse.jdt.core.extensions.ExtensionsConfig;
+import org.eclipse.jdt.core.internal.compiler.extensions.ExtensionsUtil;
 import org.eclipse.jdt.internal.compiler.ASTVisitor;
 import org.eclipse.jdt.internal.compiler.impl.*;
 import org.eclipse.jdt.internal.compiler.ast.TypeReference.AnnotationCollector;
@@ -194,9 +196,36 @@ public FlowInfo analyseCode(BlockScope currentScope, FlowContext flowContext, Fl
 		return false;
 	}
 	public void resolve(BlockScope scope) {
+		if (ExtensionsConfig.ENABLE_VAR) {
+			ExtensionsUtil.log("LocalDeclaration.resolve: declaration: " + ExtensionsUtil.logObject(this)); //$NON-NLS-1$
+			if (ExtensionsUtil.isVar(this.type)) {
+				try {
+					Expression effectiveInitialization = this.initialization;
+					if (effectiveInitialization == null) {
+						effectiveInitialization = this.initializationCopy;
+					}
+					if (effectiveInitialization == null) {
+						effectiveInitialization = this.collectionCopy;
+					}
+					TypeBinding newBinding = effectiveInitialization.resolveType(scope);
+					TypeReference newType = ExtensionsUtil.makeType(newBinding, this.type, false);		
+					newType.generatedBy = this.type;
+					this.type = newType;
+				} catch (Exception e) {
+					// This will happen for example when the hovering over the "var" type itself
+					// Not necessarily an error
+					ExtensionsUtil.log("Cannot resolve initialization"); //$NON-NLS-1$
+//					e.printStackTrace();
+					TypeReference newType = new QualifiedTypeReference(TypeConstants.JAVA_LANG_OBJECT, ExtensionsUtil.poss(this.type, 3));	
+					newType.generatedBy = this.type;
+					this.type = newType;
+				}
+				ExtensionsUtil.log("New type: " + this.type); //$NON-NLS-1$
+			}
+		}
 
 		// create a binding and add it to the scope
-		TypeBinding variableType = this.type.resolveType(scope, true /* check bounds*/);
+		TypeBinding variableType = ExtensionsUtil.resolveTypeLazy(this.type, scope);
 
 		this.bits |= (this.type.bits & ASTNode.HasTypeAnnotations);
 		checkModifiers();
@@ -234,7 +263,7 @@ public FlowInfo analyseCode(BlockScope currentScope, FlowContext flowContext, Fl
 
 		if (variableType == null) {
 			if (this.initialization != null)
-				this.initialization.resolveType(scope); // want to report all possible errors
+				ExtensionsUtil.resolveTypeLazy(this.initialization, scope); // want to report all possible errors
 			return;
 		}
 
@@ -249,7 +278,7 @@ public FlowInfo analyseCode(BlockScope currentScope, FlowContext flowContext, Fl
 			} else {
 				this.initialization.setExpressionContext(ASSIGNMENT_CONTEXT);
 				this.initialization.setExpectedType(variableType);
-				TypeBinding initializationType = this.initialization.resolveType(scope);
+				TypeBinding initializationType = ExtensionsUtil.resolveTypeLazy(this.initialization, scope);
 				if (initializationType != null) {
 					if (TypeBinding.notEquals(variableType, initializationType)) // must call before computeConversion() and typeMismatchError()
 						scope.compilationUnitScope().recordTypeConversion(variableType, initializationType);
