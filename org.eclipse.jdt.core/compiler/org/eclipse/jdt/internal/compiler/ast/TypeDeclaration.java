@@ -68,6 +68,9 @@ public class TypeDeclaration extends Statement implements ProblemSeverities, Ref
 
 	// 1.5 support
 	public TypeParameter[] typeParameters;
+	
+	// true if this is a class declared with the "struct" keyword
+	public boolean isStruct = false;
 
 public TypeDeclaration(CompilationResult compilationResult){
 	this.compilationResult = compilationResult;

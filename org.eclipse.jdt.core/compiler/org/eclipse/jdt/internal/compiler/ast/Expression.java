@@ -34,7 +34,8 @@ package org.eclipse.jdt.internal.compiler.ast;
 import java.util.ArrayList;
 
 import org.eclipse.jdt.core.compiler.CharOperation;
-import org.eclipse.jdt.core.internal.compiler.extensions.ExtensionsUtil;
+import org.eclipse.jdt.core.extensions.ExtensionsConfig;
+import org.eclipse.jdt.core.internal.compiler.extensions.CompilerExtensions;
 import org.eclipse.jdt.internal.compiler.ASTVisitor;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants;
 import org.eclipse.jdt.internal.compiler.codegen.BranchLabel;
@@ -1054,7 +1055,8 @@ public TypeBinding resolveType(ClassScope scope) {
 
 public TypeBinding resolveTypeExpecting(BlockScope scope, TypeBinding expectedType) {
 	setExpectedType(expectedType); // needed in case of generic method invocation
-	TypeBinding expressionType = ExtensionsUtil.resolveTypeLazy(this, scope);
+	TypeBinding expressionType = ExtensionsConfig.ENABLE ?
+			CompilerExtensions.resolveTypeLazy(this, scope) : this.resolveType(scope);
 	if (expressionType == null) return null;
 	if (TypeBinding.equalsEquals(expressionType, expectedType)) return expressionType;
 

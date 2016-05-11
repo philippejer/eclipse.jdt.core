@@ -40,6 +40,11 @@ public abstract class AbstractVariableDeclaration extends Statement implements I
 	public char[] name;
 
 	public TypeReference type;
+	
+	// backup of the expression used to infer "var" types
+	// required because the original can be nulled by the selection/completion parsers
+	public Expression initializationCopy = null;
+	public Expression collectionCopy = null;
 
 	public FlowInfo analyseCode(BlockScope currentScope, FlowContext flowContext, FlowInfo flowInfo) {
 		return flowInfo;
@@ -145,7 +150,4 @@ public abstract class AbstractVariableDeclaration extends Statement implements I
 	public void setFieldIndex(int depth) {
 		// do nothing by default
 	}
-	
-	public Expression initializationCopy = null;
-	public Expression collectionCopy = null;
 }

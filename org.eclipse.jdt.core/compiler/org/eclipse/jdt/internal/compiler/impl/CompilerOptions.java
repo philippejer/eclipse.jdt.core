@@ -33,6 +33,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.eclipse.jdt.core.compiler.CharOperation;
+import org.eclipse.jdt.core.extensions.ExtensionsConfig;
 import org.eclipse.jdt.internal.compiler.Compiler;
 import org.eclipse.jdt.internal.compiler.ast.ASTNode;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants;
@@ -1399,6 +1400,10 @@ public class CompilerOptions {
 		this.reportMissingEnumCaseDespiteDefault = false;
 
 		this.complainOnUninternedIdentityComparison = false;
+		
+		if (ExtensionsConfig.ENABLE) {
+			this.storeAnnotations = true;
+		}
 	}
 
 	public void set(Map<String, String> optionsMap) {
@@ -1898,6 +1903,9 @@ public class CompilerOptions {
 			} else if (DISABLED.equals(optionValue)) {
 				this.complainOnUninternedIdentityComparison = false;
 			}
+		}
+		if (ExtensionsConfig.ENABLE) {
+			this.storeAnnotations = true;
 		}
 	}
 

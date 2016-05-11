@@ -4748,6 +4748,7 @@ private boolean isKeyword(int token) {
 		case TerminalTokens.TokenNamechar:
 		case TerminalTokens.TokenNamecatch:
 		case TerminalTokens.TokenNameclass:
+		case TerminalTokens.TokenNamestruct:
 		case TerminalTokens.TokenNamecontinue:
 		case TerminalTokens.TokenNamedo:
 		case TerminalTokens.TokenNamedouble:

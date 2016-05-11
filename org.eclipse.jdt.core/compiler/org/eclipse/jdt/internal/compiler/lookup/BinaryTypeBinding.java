@@ -45,6 +45,7 @@ package org.eclipse.jdt.internal.compiler.lookup;
 import java.util.ArrayList;
 
 import org.eclipse.jdt.core.compiler.CharOperation;
+import org.eclipse.jdt.core.extensions.ExtensionsConfig;
 import org.eclipse.jdt.internal.compiler.ast.Annotation;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants;
 import org.eclipse.jdt.internal.compiler.classfmt.ExternalAnnotationProvider.IMethodAnnotationWalker;
@@ -1240,6 +1241,9 @@ public MethodBinding[] getMethods(char[] selector) {
 // Answer methods named selector, which take no more than the suggestedParameterLength.
 // The suggested parameter length is optional and may not be guaranteed by every type.
 public MethodBinding[] getMethods(char[] selector, int suggestedParameterLength) {
+	if (ExtensionsConfig.ENABLE) {
+		return this.getMethods(selector);
+	}
 	
 	if (!isPrototype())
 		return this.prototype.getMethods(selector, suggestedParameterLength);

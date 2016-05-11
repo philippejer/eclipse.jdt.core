@@ -56,6 +56,8 @@ import static org.eclipse.jdt.internal.compiler.ast.ExpressionContext.*;
 import java.util.HashMap;
 
 import org.eclipse.jdt.core.compiler.IProblem;
+import org.eclipse.jdt.core.extensions.ExtensionsConfig;
+import org.eclipse.jdt.core.internal.compiler.extensions.CompilerExtensions;
 import org.eclipse.jdt.internal.compiler.ASTVisitor;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants;
 import org.eclipse.jdt.internal.compiler.codegen.*;
@@ -470,6 +472,12 @@ public TypeBinding resolveType(BlockScope scope) {
 	} else {
 		this.binding = findConstructorBinding(scope, this, (ReferenceBinding) this.resolvedType, this.argumentTypes);
 	}
+	
+	if (ExtensionsConfig.ENABLE) {
+		CompilerExtensions.handleSyntheticArgumentsForAllocation(this, scope);		
+		CompilerExtensions.handleOptionalArgumentsForAllocation(this, scope);
+	}
+	
 	if (!this.binding.isValidBinding()) {
 		if (this.binding.declaringClass == null) {
 			this.binding.declaringClass = (ReferenceBinding) this.resolvedType;

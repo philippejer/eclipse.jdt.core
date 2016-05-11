@@ -1,0 +1,1 @@
+java -classpath .;..\bin UpdateParserFiles javadcl.java javahdr.java
