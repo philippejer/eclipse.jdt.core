@@ -42,7 +42,7 @@ $Terminals
 
 	Identifier
 
-	abstract assert boolean break byte case catch char class 
+	abstract assert boolean break byte case catch char class struct 
 	continue const default do double else enum extends false final finally float
 	for goto if implements import instanceof int
 	interface long native new null package private
@@ -557,15 +557,23 @@ ClassHeader ::= ClassHeaderName ClassHeaderExtendsopt ClassHeaderImplementsopt
 -----------------------------------------------
 -- 1.5 features : generics
 -----------------------------------------------
-ClassHeaderName ::= ClassHeaderName1 TypeParameters
+ClassHeaderName ::= ClassOrStructHeaderName TypeParameters
 /.$putCase consumeTypeHeaderNameWithTypeParameters(); $break ./
 
-ClassHeaderName -> ClassHeaderName1
+ClassHeaderName -> ClassOrStructHeaderName
 /:$readableName ClassHeaderName:/
+
+ClassOrStructHeaderName -> ClassHeaderName1
+ClassOrStructHeaderName -> ClassHeaderName2
+/:$readableName ClassOrStructHeaderName:/
 
 ClassHeaderName1 ::= Modifiersopt 'class' 'Identifier'
 /.$putCase consumeClassHeaderName1(); $break ./
-/:$readableName ClassHeaderName:/
+/:$readableName ClassHeaderName1:/
+
+ClassHeaderName2 ::= Modifiersopt 'struct' 'Identifier'
+/.$putCase consumeClassHeaderName2(); $break ./
+/:$readableName ClassHeaderName2:/
 
 ClassHeaderExtends ::= 'extends' ClassType
 /.$putCase consumeClassHeaderExtends(); $break ./

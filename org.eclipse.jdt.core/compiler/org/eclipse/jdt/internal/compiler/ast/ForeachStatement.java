@@ -23,7 +23,7 @@
 package org.eclipse.jdt.internal.compiler.ast;
 
 import org.eclipse.jdt.core.extensions.ExtensionsConfig;
-import org.eclipse.jdt.core.internal.compiler.extensions.ExtensionsUtil;
+import org.eclipse.jdt.core.internal.compiler.extensions.CompilerExtensions;
 import org.eclipse.jdt.internal.compiler.ASTVisitor;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants;
 import org.eclipse.jdt.internal.compiler.codegen.BranchLabel;
@@ -42,7 +42,6 @@ import org.eclipse.jdt.internal.compiler.lookup.ParameterizedTypeBinding;
 import org.eclipse.jdt.internal.compiler.lookup.ReferenceBinding;
 import org.eclipse.jdt.internal.compiler.lookup.TagBits;
 import org.eclipse.jdt.internal.compiler.lookup.TypeBinding;
-import org.eclipse.jdt.internal.compiler.lookup.TypeConstants;
 import org.eclipse.jdt.internal.compiler.lookup.TypeIds;
 
 public class ForeachStatement extends Statement {
@@ -418,31 +417,16 @@ public class ForeachStatement extends Statement {
 	}
 
 	public void resolve(BlockScope upperScope) {
-		if (ExtensionsConfig.ENABLE_VAR) {
-			ExtensionsUtil.log("ForEachStatement.resolve: statement: " + ExtensionsUtil.logObject(this));
-			if ((this.elementVariable != null) && ExtensionsUtil.isVar(this.elementVariable.type)) {
-				try {
-					TypeBinding newBinding = ExtensionsUtil.getForEachComponentType(collection, upperScope);
-					TypeReference newType = ExtensionsUtil.makeType(newBinding, this.elementVariable.type, false);
-					newType.generatedBy = this.elementVariable.type;
-					this.elementVariable.type = newType;
-				} catch (Exception e) {
-					ExtensionsUtil.log("Cannot resolve collection");
-//					e.printStackTrace();
-					TypeReference newType = new QualifiedTypeReference(TypeConstants.JAVA_LANG_OBJECT,
-							ExtensionsUtil.poss(this.elementVariable.type, 3));	
-					newType.generatedBy = this.elementVariable.type;
-					this.elementVariable.type = newType;
-				}
-				ExtensionsUtil.log("New type: " + this.elementVariable.type);
-			}
+		if (ExtensionsConfig.ENABLE) {
+			CompilerExtensions.handleVarResolveForEach(this, upperScope);
 		}
 		
 		// use the scope that will hold the init declarations
 		this.scope = new BlockScope(upperScope);
 		this.elementVariable.resolve(this.scope); // collection expression can see itemVariable
 		TypeBinding elementType = this.elementVariable.type.resolvedType;
-		TypeBinding collectionType = this.collection == null ? null : ExtensionsUtil.resolveTypeLazy(this.collection, upperScope);
+		TypeBinding collectionType = this.collection == null ? null : ExtensionsConfig.ENABLE ?
+				CompilerExtensions.resolveTypeLazy(this.collection, upperScope) : this.collection.resolveType(upperScope);
 
 		TypeBinding expectedCollectionType = null;
 		if (elementType != null && collectionType != null) {

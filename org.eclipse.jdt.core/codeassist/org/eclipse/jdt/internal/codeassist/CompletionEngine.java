@@ -38,6 +38,8 @@ import org.eclipse.jdt.core.WorkingCopyOwner;
 import org.eclipse.jdt.core.compiler.CategorizedProblem;
 import org.eclipse.jdt.core.compiler.CharOperation;
 import org.eclipse.jdt.core.compiler.IProblem;
+import org.eclipse.jdt.core.extensions.ExtensionsConfig;
+import org.eclipse.jdt.core.internal.compiler.extensions.CompilerExtensions;
 import org.eclipse.jdt.core.search.IJavaSearchConstants;
 import org.eclipse.jdt.internal.codeassist.complete.*;
 import org.eclipse.jdt.internal.codeassist.impl.AssistParser;
@@ -5260,11 +5262,21 @@ public final class CompletionEngine
 					int paramLength = parameters.length;
 					if (minArgLength > paramLength)
 						continue next;
-					for (int a = minArgLength; --a >= 0;)
-						if (argTypes[a] != null) { // can be null if it could not be resolved properly
-							if (!argTypes[a].isCompatibleWith(constructor.parameters[a]))
-								continue next;
-						}
+					if (ExtensionsConfig.ENABLE && !forAnonymousType) {
+						TypeBinding[] newArgTypes = CompilerExtensions.handleSyntheticParametersForCompatibility(constructor, argTypes);
+						int argLength = newArgTypes.length;						
+						for (int a = argLength; --a >= 0;)
+							if (newArgTypes[a] != null) { // can be null if it could not be resolved properly
+								if (!newArgTypes[a].isCompatibleWith(constructor.parameters[a]))
+									continue next;
+							}
+					} else {
+						for (int a = minArgLength; --a >= 0;)
+							if (argTypes[a] != null) { // can be null if it could not be resolved properly
+								if (!argTypes[a].isCompatibleWith(constructor.parameters[a]))
+									continue next;
+							}
+					}
 
 					char[][] parameterPackageNames = new char[paramLength][];
 					char[][] parameterTypeNames = new char[paramLength][];
@@ -5274,6 +5286,27 @@ public final class CompletionEngine
 						parameterTypeNames[i] = type.qualifiedSourceName();
 					}
 					char[][] parameterNames = findMethodParameterNames(constructor,parameterTypeNames);
+			
+					if (ExtensionsConfig.ENABLE && !forAnonymousType) {
+						CompilerExtensions.initSyntheticParameterAnnotations(constructor);
+						int numSyntheticAnnotations = constructor.numSyntheticAnnotations;
+						if (numSyntheticAnnotations > 0) {
+							int newLength = paramLength - numSyntheticAnnotations;
+							char[][] newParameterPackageNames = new char[newLength][];
+							char[][] newParameterTypeNames = new char[newLength][];
+							char[][] newParameterNames = new char[newLength][];
+							for (int i = 0, j = 0; i < paramLength; i++) {
+								if (constructor.syntheticAnnotations[i] == null) {
+									newParameterPackageNames[j] = parameterPackageNames[i];
+									newParameterTypeNames[j] = parameterTypeNames[i];
+									newParameterNames[j++] = parameterNames[i];
+								}
+							}
+							parameterPackageNames = newParameterPackageNames;
+							parameterTypeNames = newParameterTypeNames;
+							parameterNames = newParameterNames;
+						}
+					}
 
 					char[] completion = CharOperation.NO_CHAR;
 					
@@ -5501,6 +5534,9 @@ public final class CompletionEngine
 								if(DEBUG) {
 									this.printDebug(proposal);
 								}
+								if (ExtensionsConfig.ENABLE) {
+									proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(constructor, proposal.getSignature()));
+								}
 							}
 						} else {
 							if(!isIgnored(CompletionProposal.METHOD_REF, missingElements != null) && (this.assistNodeInJavadoc & CompletionOnJavadoc.ONLY_INLINE_TAG) == 0) {
@@ -5543,6 +5579,9 @@ public final class CompletionEngine
 								if(DEBUG) {
 									this.printDebug(proposal);
 								}
+								if (ExtensionsConfig.ENABLE) {
+									proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(constructor, proposal.getSignature()));
+								}
 							}
 							if ((this.assistNodeInJavadoc & CompletionOnJavadoc.TEXT) != 0 && !this.requestor.isIgnored(CompletionProposal.JAVADOC_METHOD_REF)) {
 								char[] javadocCompletion = inlineTagCompletion(completion, JavadocTagConstants.TAG_LINK);
@@ -5572,6 +5611,9 @@ public final class CompletionEngine
 								this.requestor.accept(proposal);
 								if(DEBUG) {
 									this.printDebug(proposal);
+								}
+								if (ExtensionsConfig.ENABLE) {
+									proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(constructor, proposal.getSignature()));
 								}
 							}
 						}
@@ -8560,10 +8602,22 @@ public final class CompletionEngine
 			if (minArgLength > method.parameters.length)
 				continue next;
 
-			for (int a = minArgLength; --a >= 0;){
-				if (argTypes[a] != null) { // can be null if it could not be resolved properly
-					if (!argTypes[a].isCompatibleWith(method.parameters[a])) {
-						continue next;
+			if (ExtensionsConfig.ENABLE) {
+				TypeBinding[] newArgTypes = CompilerExtensions.handleSyntheticParametersForCompatibility(method, argTypes);
+				int argLength = newArgTypes.length;
+				for (int a = argLength; --a >= 0;){
+					if (newArgTypes[a] != null) { // can be null if it could not be resolved properly
+						if (!newArgTypes[a].isCompatibleWith(method.parameters[a])) {
+							continue next;
+						}
+					}
+				}				
+			} else {
+				for (int a = minArgLength; --a >= 0;){
+					if (argTypes[a] != null) { // can be null if it could not be resolved properly
+						if (!argTypes[a].isCompatibleWith(method.parameters[a])) {
+							continue next;
+						}
 					}
 				}
 			}
@@ -8620,6 +8674,27 @@ public final class CompletionEngine
 					parameterTypeNames[i] = type.qualifiedSourceName();
 				}
 			char[][] parameterNames = findMethodParameterNames(method,parameterTypeNames);
+			
+			if (ExtensionsConfig.ENABLE) {
+				CompilerExtensions.initSyntheticParameterAnnotations(method);
+				int numSyntheticAnnotations = method.numSyntheticAnnotations;
+				if (numSyntheticAnnotations > 0) {
+					int newLength = length - numSyntheticAnnotations;
+					char[][] newParameterPackageNames = new char[newLength][];
+					char[][] newParameterTypeNames = new char[newLength][];
+					char[][] newParameterNames = new char[newLength][];
+					for (int i = 0, j = 0; i < length; i++) {
+						if (method.syntheticAnnotations[i] == null) {
+							newParameterPackageNames[j] = parameterPackageNames[i];
+							newParameterTypeNames[j] = parameterTypeNames[i];
+							newParameterNames[j++] = parameterNames[i];
+						}
+					}
+					parameterPackageNames = newParameterPackageNames;
+					parameterTypeNames = newParameterTypeNames;
+					parameterNames = newParameterNames;
+				}
+			}
 
 			char[] completion = CharOperation.NO_CHAR;
 
@@ -8763,6 +8838,9 @@ public final class CompletionEngine
 					if(DEBUG) {
 						this.printDebug(proposal);
 					}
+					if (ExtensionsConfig.ENABLE) {
+						proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(method, proposal.getSignature()));
+					}
 				}
 
 				// Javadoc proposal
@@ -8793,6 +8871,9 @@ public final class CompletionEngine
 					this.requestor.accept(proposal);
 					if(DEBUG) {
 						this.printDebug(proposal);
+					}
+					if (ExtensionsConfig.ENABLE) {
+						proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(method, proposal.getSignature()));
 					}
 				}
 			} else {
@@ -8835,6 +8916,9 @@ public final class CompletionEngine
 					this.requestor.accept(proposal);
 					if(DEBUG) {
 						this.printDebug(proposal);
+					}
+					if (ExtensionsConfig.ENABLE) {
+						proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(method, proposal.getSignature()));
 					}
 				}
 			}

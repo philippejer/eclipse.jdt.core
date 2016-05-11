@@ -39,7 +39,7 @@ import static org.eclipse.jdt.internal.compiler.ast.ExpressionContext.ASSIGNMENT
 import java.util.List;
 
 import org.eclipse.jdt.core.extensions.ExtensionsConfig;
-import org.eclipse.jdt.core.internal.compiler.extensions.ExtensionsUtil;
+import org.eclipse.jdt.core.internal.compiler.extensions.CompilerExtensions;
 import org.eclipse.jdt.internal.compiler.ASTVisitor;
 import org.eclipse.jdt.internal.compiler.impl.*;
 import org.eclipse.jdt.internal.compiler.ast.TypeReference.AnnotationCollector;
@@ -196,36 +196,13 @@ public FlowInfo analyseCode(BlockScope currentScope, FlowContext flowContext, Fl
 		return false;
 	}
 	public void resolve(BlockScope scope) {
-		if (ExtensionsConfig.ENABLE_VAR) {
-			ExtensionsUtil.log("LocalDeclaration.resolve: declaration: " + ExtensionsUtil.logObject(this)); //$NON-NLS-1$
-			if (ExtensionsUtil.isVar(this.type)) {
-				try {
-					Expression effectiveInitialization = this.initialization;
-					if (effectiveInitialization == null) {
-						effectiveInitialization = this.initializationCopy;
-					}
-					if (effectiveInitialization == null) {
-						effectiveInitialization = this.collectionCopy;
-					}
-					TypeBinding newBinding = effectiveInitialization.resolveType(scope);
-					TypeReference newType = ExtensionsUtil.makeType(newBinding, this.type, false);		
-					newType.generatedBy = this.type;
-					this.type = newType;
-				} catch (Exception e) {
-					// This will happen for example when the hovering over the "var" type itself
-					// Not necessarily an error
-					ExtensionsUtil.log("Cannot resolve initialization"); //$NON-NLS-1$
-//					e.printStackTrace();
-					TypeReference newType = new QualifiedTypeReference(TypeConstants.JAVA_LANG_OBJECT, ExtensionsUtil.poss(this.type, 3));	
-					newType.generatedBy = this.type;
-					this.type = newType;
-				}
-				ExtensionsUtil.log("New type: " + this.type); //$NON-NLS-1$
-			}
+		if (ExtensionsConfig.ENABLE) {
+			CompilerExtensions.handleVarResolveLocalDeclaration(this, scope);
 		}
-
+		
 		// create a binding and add it to the scope
-		TypeBinding variableType = ExtensionsUtil.resolveTypeLazy(this.type, scope);
+		TypeBinding variableType = ExtensionsConfig.ENABLE ?
+				CompilerExtensions.resolveTypeLazy(this.type, scope) : this.type.resolveType(scope);
 
 		this.bits |= (this.type.bits & ASTNode.HasTypeAnnotations);
 		checkModifiers();
@@ -263,7 +240,11 @@ public FlowInfo analyseCode(BlockScope currentScope, FlowContext flowContext, Fl
 
 		if (variableType == null) {
 			if (this.initialization != null)
-				ExtensionsUtil.resolveTypeLazy(this.initialization, scope); // want to report all possible errors
+				 // want to report all possible errors
+				if (ExtensionsConfig.ENABLE)
+					CompilerExtensions.resolveTypeLazy(this.initialization, scope);
+				else
+					this.initialization.resolveType(scope);
 			return;
 		}
 
@@ -278,7 +259,8 @@ public FlowInfo analyseCode(BlockScope currentScope, FlowContext flowContext, Fl
 			} else {
 				this.initialization.setExpressionContext(ASSIGNMENT_CONTEXT);
 				this.initialization.setExpectedType(variableType);
-				TypeBinding initializationType = ExtensionsUtil.resolveTypeLazy(this.initialization, scope);
+				TypeBinding initializationType = ExtensionsConfig.ENABLE ?
+						CompilerExtensions.resolveTypeLazy(this.initialization, scope) : this.initialization.resolveType(scope);
 				if (initializationType != null) {
 					if (TypeBinding.notEquals(variableType, initializationType)) // must call before computeConversion() and typeMismatchError()
 						scope.compilationUnitScope().recordTypeConversion(variableType, initializationType);

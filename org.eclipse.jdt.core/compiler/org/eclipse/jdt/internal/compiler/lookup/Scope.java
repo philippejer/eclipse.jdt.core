@@ -61,6 +61,8 @@ package org.eclipse.jdt.internal.compiler.lookup;
 import java.util.*;
 
 import org.eclipse.jdt.core.compiler.CharOperation;
+import org.eclipse.jdt.core.extensions.ExtensionsConfig;
+import org.eclipse.jdt.core.internal.compiler.extensions.CompilerExtensions;
 import org.eclipse.jdt.internal.compiler.ast.*;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants;
 import org.eclipse.jdt.internal.compiler.impl.CompilerOptions;
@@ -707,6 +709,10 @@ public abstract class Scope {
 	 */
 	protected final MethodBinding computeCompatibleMethod(MethodBinding method, TypeBinding[] arguments, InvocationSite invocationSite, boolean tiebreakingVarargsMethods)
 	{
+		if (ExtensionsConfig.ENABLE) {
+			arguments = CompilerExtensions.handleSyntheticParametersForCompatibility(method, arguments);
+			arguments = CompilerExtensions.handleOptionalParametersForCompatibility(method, arguments);
+		}
 		TypeBinding[] genericTypeArguments = invocationSite.genericTypeArguments();
 		TypeBinding[] parameters = method.parameters;
 		TypeVariableBinding[] typeVariables = method.typeVariables;

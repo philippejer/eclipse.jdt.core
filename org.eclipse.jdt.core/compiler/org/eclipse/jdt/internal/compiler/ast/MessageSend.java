@@ -66,6 +66,8 @@ import static org.eclipse.jdt.internal.compiler.ast.ExpressionContext.*;
 import java.util.HashMap;
 
 import org.eclipse.jdt.core.compiler.CharOperation;
+import org.eclipse.jdt.core.extensions.ExtensionsConfig;
+import org.eclipse.jdt.core.internal.compiler.extensions.CompilerExtensions;
 import org.eclipse.jdt.internal.compiler.ASTVisitor;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants;
 import org.eclipse.jdt.internal.compiler.codegen.CodeStream;
@@ -132,7 +134,6 @@ public class MessageSend extends Expression implements IPolyExpression, Invocati
 	protected boolean argsContainCast;
 	public TypeBinding[] argumentTypes = Binding.NO_PARAMETERS;
 	public boolean argumentsHaveErrors = false;
-	
 
 public FlowInfo analyseCode(BlockScope currentScope, FlowContext flowContext, FlowInfo flowInfo) {
 	boolean nonStatic = !this.binding.isStatic();
@@ -433,6 +434,15 @@ public void computeConversion(Scope scope, TypeBinding runtimeTimeType, TypeBind
  * @param valueRequired boolean
  */
 public void generateCode(BlockScope currentScope, CodeStream codeStream, boolean valueRequired) {
+	if (ExtensionsConfig.ENABLE) {
+		if (CompilerExtensions.isMessageSendDisabled(this.binding)) {
+			Expression expression = CompilerExtensions.makeDefaultLiteral(this.resolvedType, this.sourceStart, this.sourceEnd);
+			expression.resolveType(currentScope);
+			expression.generateCode(currentScope, codeStream, valueRequired);
+			return;
+		}
+	}
+	
 	cleanUpInferenceContexts();
 	int pc = codeStream.position;
 	// generate receiver/enclosing instance access
@@ -730,6 +740,11 @@ public TypeBinding resolveType(BlockScope scope) {
 	if (methodType != null && methodType.isPolyType()) {
 		this.resolvedType = this.binding.returnType.capture(scope, this.sourceStart, this.sourceEnd);
 		return methodType;
+	}
+	
+	if (ExtensionsConfig.ENABLE) {
+		CompilerExtensions.handleSyntheticArgumentsForMessageSend(this, scope);		
+		CompilerExtensions.handleOptionalArgumentsForMessageSend(this, scope);
 	}
 
 	if (!this.binding.isValidBinding()) {
