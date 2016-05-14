@@ -779,12 +779,14 @@ FormalParameterList ::= FormalParameterList ',' FormalParameter
 
 --1.1 feature
 FormalParameter ::= Modifiersopt Type VariableDeclaratorIdOrThis
-/.$putCase consumeFormalParameter(false); $break ./
+/.$putCase consumeFormalParameter(false, false); $break ./
+FormalParameter ::= Modifiersopt Type VariableDeclaratorIdOrThis AssignmentOperator AssignmentExpression
+/.$putCase consumeFormalParameter(false, true); $break ./
 FormalParameter ::= Modifiersopt Type PushZeroTypeAnnotations '...' VariableDeclaratorIdOrThis
-/.$putCase consumeFormalParameter(true); $break ./
+/.$putCase consumeFormalParameter(true, false); $break ./
 /:$compliance 1.5:/
 FormalParameter ::= Modifiersopt Type @308... TypeAnnotations '...' VariableDeclaratorIdOrThis
-/.$putCase consumeFormalParameter(true); $break ./
+/.$putCase consumeFormalParameter(true, false); $break ./
 /:$readableName FormalParameter:/
 /:$compliance 1.8:/
 /:$recovery_template Identifier Identifier:/

@@ -32,6 +32,8 @@ package org.eclipse.jdt.internal.compiler.ast;
 
 import static org.eclipse.jdt.internal.compiler.ast.ExpressionContext.INVOCATION_CONTEXT;
 
+import org.eclipse.jdt.core.extensions.ExtensionsConfig;
+import org.eclipse.jdt.core.internal.compiler.extensions.CompilerExtensions;
 import org.eclipse.jdt.internal.compiler.ASTVisitor;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants;
 import org.eclipse.jdt.internal.compiler.codegen.CodeStream;
@@ -427,6 +429,10 @@ public class ExplicitConstructorCall extends Statement implements Invocation {
 				return;
 			}
 			this.binding = findConstructorBinding(scope, this, receiverType, argumentTypes);
+	
+			if (ExtensionsConfig.ENABLE) {
+				argumentTypes = CompilerExtensions.handleSyntheticArgumentsForConstructorCall(this, scope, argumentTypes);		
+			}
 
 			if (this.binding.isValidBinding()) {
 				if ((this.binding.tagBits & TagBits.HasMissingType) != 0) {

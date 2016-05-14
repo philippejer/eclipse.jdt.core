@@ -31,6 +31,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.eclipse.jdt.core.compiler.*;
+import org.eclipse.jdt.core.extensions.ExtensionsConfig;
+import org.eclipse.jdt.core.internal.compiler.extensions.CompilerExtensions;
 import org.eclipse.jdt.internal.compiler.*;
 import org.eclipse.jdt.internal.compiler.ast.TypeReference.AnnotationCollector;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants;
@@ -519,6 +521,10 @@ public boolean isRecursive(ArrayList visited) {
 }
 
 public void parseStatements(Parser parser, CompilationUnitDeclaration unit) {
+	if (ExtensionsConfig.ENABLE) {
+		if (CompilerExtensions.isGeneratedMethod(this)) return;
+	}
+		
 	//fill up the constructor body with its statements
 	if (((this.bits & ASTNode.IsDefaultConstructor) != 0) && this.constructorCall == null){
 		this.constructorCall = SuperReference.implicitSuperConstructorCall();
