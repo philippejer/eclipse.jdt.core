@@ -711,7 +711,6 @@ public abstract class Scope {
 	{
 		if (ExtensionsConfig.ENABLE) {
 			arguments = CompilerExtensions.handleSyntheticParametersForCompatibility(method, arguments);
-			arguments = CompilerExtensions.handleOptionalParametersForCompatibility(method, arguments);
 		}
 		TypeBinding[] genericTypeArguments = invocationSite.genericTypeArguments();
 		TypeBinding[] parameters = method.parameters;

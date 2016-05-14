@@ -695,7 +695,7 @@ protected void consumeFieldDeclaration() {
 		this.requestor.exitField(this.lastFieldBodyEndPosition, this.lastFieldEndPosition);
 	}
 }
-protected void consumeFormalParameter(boolean isVarArgs) {
+protected void consumeFormalParameter(boolean isVarArgs, boolean isDefault) {
 	// FormalParameter ::= Type VariableDeclaratorId ==> false
 	// FormalParameter ::= Modifiers Type VariableDeclaratorId ==> true
 	/*
@@ -707,6 +707,12 @@ protected void consumeFormalParameter(boolean isVarArgs) {
 	identifierStack :
 	intStack :
 	*/
+	Expression defaultExpression = null;
+	if (isDefault) {		
+		this.intPtr--; // assignment operator position	
+		this.expressionLengthPtr--;
+		defaultExpression = this.expressionStack[this.expressionPtr--];
+	}
 	NameReference qualifyingNameReference = null;
     boolean isReceiver = this.intStack[this.intPtr--] == 0;
     if (isReceiver) {
@@ -778,6 +784,7 @@ protected void consumeFormalParameter(boolean isVarArgs) {
 		if (currentRecoveryType != null)
 			currentRecoveryType.annotationsConsumed(arg.annotations);
 	}
+	arg.defaultExpression = defaultExpression;
 	pushOnAstStack(arg);
 	this.intArrayPtr--;
 }

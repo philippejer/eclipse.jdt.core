@@ -474,8 +474,7 @@ public TypeBinding resolveType(BlockScope scope) {
 	}
 	
 	if (ExtensionsConfig.ENABLE) {
-		CompilerExtensions.handleSyntheticArgumentsForAllocation(this, scope);		
-		CompilerExtensions.handleOptionalArgumentsForAllocation(this, scope);
+		CompilerExtensions.handleSyntheticArgumentsForAllocation(this, scope);
 	}
 	
 	if (!this.binding.isValidBinding()) {

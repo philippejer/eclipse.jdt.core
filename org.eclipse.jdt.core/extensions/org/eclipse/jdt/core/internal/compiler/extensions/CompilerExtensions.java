@@ -6,13 +6,20 @@ import java.util.Collections;
 import java.util.List;
 
 import org.eclipse.jdt.core.Signature;
+import org.eclipse.jdt.core.extensions.ExtensionsConfig;
+import org.eclipse.jdt.internal.codeassist.complete.CompletionOnArgumentName;
+import org.eclipse.jdt.internal.codeassist.select.SelectionOnArgumentName;
 import org.eclipse.jdt.internal.compiler.ast.ASTNode;
 import org.eclipse.jdt.internal.compiler.ast.AbstractMethodDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.AllocationExpression;
+import org.eclipse.jdt.internal.compiler.ast.Annotation;
+import org.eclipse.jdt.internal.compiler.ast.Argument;
 import org.eclipse.jdt.internal.compiler.ast.ArrayQualifiedTypeReference;
 import org.eclipse.jdt.internal.compiler.ast.ArrayTypeReference;
+import org.eclipse.jdt.internal.compiler.ast.ClassLiteralAccess;
 import org.eclipse.jdt.internal.compiler.ast.CompilationUnitDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.ConstructorDeclaration;
+import org.eclipse.jdt.internal.compiler.ast.ExplicitConstructorCall;
 import org.eclipse.jdt.internal.compiler.ast.Expression;
 import org.eclipse.jdt.internal.compiler.ast.FalseLiteral;
 import org.eclipse.jdt.internal.compiler.ast.FieldDeclaration;
@@ -21,15 +28,24 @@ import org.eclipse.jdt.internal.compiler.ast.IntLiteral;
 import org.eclipse.jdt.internal.compiler.ast.Invocation;
 import org.eclipse.jdt.internal.compiler.ast.Literal;
 import org.eclipse.jdt.internal.compiler.ast.LocalDeclaration;
+import org.eclipse.jdt.internal.compiler.ast.MarkerAnnotation;
 import org.eclipse.jdt.internal.compiler.ast.MessageSend;
 import org.eclipse.jdt.internal.compiler.ast.MethodDeclaration;
+import org.eclipse.jdt.internal.compiler.ast.NormalAnnotation;
 import org.eclipse.jdt.internal.compiler.ast.NullLiteral;
 import org.eclipse.jdt.internal.compiler.ast.ParameterizedQualifiedTypeReference;
 import org.eclipse.jdt.internal.compiler.ast.ParameterizedSingleTypeReference;
+import org.eclipse.jdt.internal.compiler.ast.QualifiedNameReference;
 import org.eclipse.jdt.internal.compiler.ast.QualifiedTypeReference;
+import org.eclipse.jdt.internal.compiler.ast.ReturnStatement;
+import org.eclipse.jdt.internal.compiler.ast.SingleMemberAnnotation;
+import org.eclipse.jdt.internal.compiler.ast.SingleNameReference;
 import org.eclipse.jdt.internal.compiler.ast.SingleTypeReference;
+import org.eclipse.jdt.internal.compiler.ast.Statement;
 import org.eclipse.jdt.internal.compiler.ast.StringLiteral;
+import org.eclipse.jdt.internal.compiler.ast.ThisReference;
 import org.eclipse.jdt.internal.compiler.ast.TypeDeclaration;
+import org.eclipse.jdt.internal.compiler.ast.TypeParameter;
 import org.eclipse.jdt.internal.compiler.ast.TypeReference;
 import org.eclipse.jdt.internal.compiler.ast.Wildcard;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants;
@@ -47,6 +63,7 @@ import org.eclipse.jdt.internal.compiler.lookup.MethodBinding;
 import org.eclipse.jdt.internal.compiler.lookup.MethodScope;
 import org.eclipse.jdt.internal.compiler.lookup.ParameterizedTypeBinding;
 import org.eclipse.jdt.internal.compiler.lookup.ReferenceBinding;
+import org.eclipse.jdt.internal.compiler.lookup.Scope;
 import org.eclipse.jdt.internal.compiler.lookup.TypeBinding;
 import org.eclipse.jdt.internal.compiler.lookup.TypeConstants;
 import org.eclipse.jdt.internal.compiler.lookup.TypeIds;
@@ -59,70 +76,308 @@ import org.eclipse.jdt.internal.compiler.util.Util;
  */
 public class CompilerExtensions {
 
-	public static void log(String message) {
-		System.err.println(message);
-		System.err.flush();
+	private static long[] copy(long[] array) {
+		return array == null ? null : array.clone();
 	}
-
-	public static String logObject(Object object) {
-		String objString = object.toString();
-		if (objString.length() > 200)
-			objString = objString.substring(0, 200);
-		objString = objString.replace("\n", "\\n"); //$NON-NLS-1$ //$NON-NLS-2$
-		return objString + " [" + System.identityHashCode(object) + "]"; //$NON-NLS-1$ //$NON-NLS-2$
+	
+	public static String toQualifiedName(char[][] typeName) {
+		int len = typeName.length - 1;
+		for (char[] c : typeName) len += c.length;
+		StringBuilder sb = new StringBuilder(len);
+		boolean first = true;
+		for (char[] c : typeName) {
+			sb.append(first ? "" : ".").append(c); //$NON-NLS-1$ //$NON-NLS-2$
+			first = false;
+		}
+		return sb.toString();
+	}
+	
+	public static char[][] fromQualifiedName(String typeName) {
+		String[] split = typeName.split("\\."); //$NON-NLS-1$
+		char[][] result = new char[split.length][];
+		for (int i = 0; i < split.length; i++) {
+			result[i] = split[i].toCharArray();
+		}
+		return result;
+	}
+	
+	public static long pos(int startPos, int endPos) {
+		return ((long) startPos << 32) | (endPos & 0xFFFFFFFFL);
 	}
 	
 	public static long pos(ASTNode node) {
-		return ((long) node.sourceStart << 32) | (node.sourceEnd & 0xFFFFFFFFL);
+		return pos(node.sourceStart, node.sourceEnd);
 	}
-
+	
 	public static long[] poss(ASTNode node, int repeat) {
-		long p = ((long) node.sourceStart << 32) | (node.sourceEnd & 0xFFFFFFFFL);
+		long p = pos(node);
 		long[] out = new long[repeat];
 		Arrays.fill(out, p);
 		return out;
 	}
-
-	public static TypeReference makeTypeReference(TypeBinding binding, ASTNode pos, boolean allowCompound) {
+	
+	public static boolean nameEquals(char[][] typeName, String string) {
+		int pos = 0, len = string.length();
+		for (int i = 0; i < typeName.length; i++) {
+			char[] t = typeName[i];
+			if (i > 0) {
+				if (pos == len) return false;
+				if (string.charAt(pos++) != '.') return false;
+			}
+			for (int j = 0; j < t.length; j++) {
+				if (pos == len) return false;
+				if (string.charAt(pos++) != t[j]) return false;
+			}
+		}
+		
+		return true;
+	}
+	
+	public static Object calculateValue(Expression e) {
+		if (e instanceof Literal) {
+			((Literal)e).computeConstant();
+			switch (e.constant.typeID()) {
+			case TypeIds.T_int: return e.constant.intValue();
+			case TypeIds.T_byte: return e.constant.byteValue();
+			case TypeIds.T_short: return e.constant.shortValue();
+			case TypeIds.T_char: return e.constant.charValue();
+			case TypeIds.T_float: return e.constant.floatValue();
+			case TypeIds.T_double: return e.constant.doubleValue();
+			case TypeIds.T_boolean: return e.constant.booleanValue();
+			case TypeIds.T_long: return e.constant.longValue();
+			case TypeIds.T_JavaLangString: return e.constant.stringValue();
+			default: return null;
+			}
+		} else if (e instanceof ClassLiteralAccess) {
+			return toQualifiedName(((ClassLiteralAccess)e).type.getTypeName());
+		} else if (e instanceof SingleNameReference) {
+			return new String(((SingleNameReference)e).token);
+		} else if (e instanceof QualifiedNameReference) {
+			String qName = toQualifiedName(((QualifiedNameReference)e).tokens);
+			int idx = qName.lastIndexOf('.');
+			return idx == -1 ? qName : qName.substring(idx+1);
+		}
+		
+		return null;
+	}
+	
+	public static Annotation copyAnnotation(Annotation annotation, ASTNode source) {
+		int pS = source.sourceStart, pE = source.sourceEnd;
+		
+		if (annotation instanceof MarkerAnnotation) {
+			MarkerAnnotation ann = new MarkerAnnotation(copyType(annotation.type, source), pS);
+			ann.declarationSourceEnd = ann.sourceEnd = ann.statementEnd = pE;
+			return ann;
+		}
+		
+		if (annotation instanceof SingleMemberAnnotation) {
+			SingleMemberAnnotation ann = new SingleMemberAnnotation(copyType(annotation.type, source), pS);
+			ann.declarationSourceEnd = ann.sourceEnd = ann.statementEnd = pE;
+			//TODO memberValue(s) need to be copied as well (same for copying a NormalAnnotation as below).
+			ann.memberValue = ((SingleMemberAnnotation)annotation).memberValue;
+			return ann;
+		}
+		
+		if (annotation instanceof NormalAnnotation) {
+			NormalAnnotation ann = new NormalAnnotation(copyType(annotation.type, source), pS);
+			ann.declarationSourceEnd = ann.statementEnd = ann.sourceEnd = pE;
+			ann.memberValuePairs = ((NormalAnnotation)annotation).memberValuePairs;
+			return ann;
+		}
+		
+		return annotation;
+	}
+	
+	public static Annotation[] copyAnnotations(ASTNode source, Annotation[]... allAnnotations) {
+		List<Annotation> result = null;
+		for (Annotation[] annotations : allAnnotations) {
+			if (annotations != null) {
+				for (Annotation annotation : annotations) {
+					if (result == null) result = new ArrayList<Annotation>();
+					result.add(copyAnnotation(annotation, source));
+				}
+			}
+		}
+		
+		return result == null ? null : result.toArray(new Annotation[0]);
+	}
+	
+	public static TypeParameter[] copyTypeParams(TypeParameter[] params, ASTNode source) {
+		if (params == null) return null;
+		TypeParameter[] out = new TypeParameter[params.length];
+		int idx = 0;
+		for (TypeParameter param : params) {
+			TypeParameter o = new TypeParameter();
+			o.annotations = param.annotations;
+			o.bits = param.bits;
+			o.modifiers = param.modifiers;
+			o.name = param.name;
+			o.type = copyType(param.type, source);
+			o.sourceStart = param.sourceStart;
+			o.sourceEnd = param.sourceEnd;
+			o.declarationEnd = param.declarationEnd;
+			o.declarationSourceStart = param.declarationSourceStart;
+			o.declarationSourceEnd = param.declarationSourceEnd;
+			if (param.bounds != null) {
+				TypeReference[] b = new TypeReference[param.bounds.length];
+				int idx2 = 0;
+				for (TypeReference ref : param.bounds) b[idx2++] = copyType(ref, source);
+				o.bounds = b;
+			}
+			out[idx++] = o;
+		}
+		return out;
+	}
+	
+	public static TypeReference namePlusTypeParamsToTypeReference(char[] typeName, TypeParameter[] params, long p) {
+		if (params != null && params.length > 0) {
+			TypeReference[] refs = new TypeReference[params.length];
+			int idx = 0;
+			for (TypeParameter param : params) {
+				TypeReference typeRef = new SingleTypeReference(param.name, p);
+				refs[idx++] = typeRef;
+			}
+			return new ParameterizedSingleTypeReference(typeName, refs, 0, p);
+		}
+		
+		return new SingleTypeReference(typeName, p);
+	}
+	
+	public static TypeReference[] copyTypes(TypeReference[] refs) {
+		return copyTypes(refs, null);
+	}
+	
+	public static TypeReference[] copyTypes(TypeReference[] refs, ASTNode source) {
+		if (refs == null) return null;
+		TypeReference[] outs = new TypeReference[refs.length];
+		int idx = 0;
+		for (TypeReference ref : refs) {
+			outs[idx++] = copyType(ref, source);
+		}
+		return outs;
+	}
+	
+	public static TypeReference copyType(TypeReference ref) {
+		return copyType(ref, null);
+	}
+	
+	public static TypeReference copyType(TypeReference ref, ASTNode source) {
+		if (ref instanceof ParameterizedQualifiedTypeReference) {
+			ParameterizedQualifiedTypeReference iRef = (ParameterizedQualifiedTypeReference) ref;
+			TypeReference[][] args = null;
+			if (iRef.typeArguments != null) {
+				args = new TypeReference[iRef.typeArguments.length][];
+				int idx = 0;
+				for (TypeReference[] inRefArray : iRef.typeArguments) {
+					if (inRefArray == null) args[idx++] = null;
+					else {
+						TypeReference[] outRefArray = new TypeReference[inRefArray.length];
+						int idx2 = 0;
+						for (TypeReference inRef : inRefArray) {
+							outRefArray[idx2++] = copyType(inRef, source);
+						}
+						args[idx++] = outRefArray;
+					}
+				}
+			}
+			
+			TypeReference typeRef = new ParameterizedQualifiedTypeReference(iRef.tokens, args, iRef.dimensions(), copy(iRef.sourcePositions));
+			return typeRef;
+		}
+		
+		if (ref instanceof ArrayQualifiedTypeReference) {
+			ArrayQualifiedTypeReference iRef = (ArrayQualifiedTypeReference) ref;
+			TypeReference typeRef = new ArrayQualifiedTypeReference(iRef.tokens, iRef.dimensions(), copy(iRef.sourcePositions));
+			return typeRef;
+		}
+		
+		if (ref instanceof QualifiedTypeReference) {
+			QualifiedTypeReference iRef = (QualifiedTypeReference) ref;
+			TypeReference typeRef = new QualifiedTypeReference(iRef.tokens, copy(iRef.sourcePositions));
+			return typeRef;
+		}
+		
+		if (ref instanceof ParameterizedSingleTypeReference) {
+			ParameterizedSingleTypeReference iRef = (ParameterizedSingleTypeReference) ref;
+			TypeReference[] args = null;
+			if (iRef.typeArguments != null) {
+				args = new TypeReference[iRef.typeArguments.length];
+				int idx = 0;
+				for (TypeReference inRef : iRef.typeArguments) {
+					if (inRef == null) args[idx++] = null;
+					else args[idx++] = copyType(inRef, source);
+				}
+			}
+			
+			TypeReference typeRef = new ParameterizedSingleTypeReference(iRef.token, args, iRef.dimensions(), (long)iRef.sourceStart << 32 | iRef.sourceEnd);
+			return typeRef;
+		}
+		
+		if (ref instanceof ArrayTypeReference) {
+			ArrayTypeReference iRef = (ArrayTypeReference) ref;
+			TypeReference typeRef = new ArrayTypeReference(iRef.token, iRef.dimensions(), (long)iRef.sourceStart << 32 | iRef.sourceEnd);
+			return typeRef;
+		}
+		
+		if (ref instanceof Wildcard) {
+			Wildcard original = (Wildcard)ref;
+			
+			Wildcard wildcard = new Wildcard(original.kind);
+			wildcard.sourceStart = original.sourceStart;
+			wildcard.sourceEnd = original.sourceEnd;
+			if (original.bound != null) wildcard.bound = copyType(original.bound, source);
+			return wildcard;
+		}
+		
+		if (ref instanceof SingleTypeReference) {
+			SingleTypeReference iRef = (SingleTypeReference) ref;
+			TypeReference typeRef = new SingleTypeReference(iRef.token, (long)iRef.sourceStart << 32 | iRef.sourceEnd);
+			return typeRef;
+		}
+		
+		return ref;
+	}
+	
+	public static TypeReference makeType(TypeBinding binding, ASTNode pos, boolean allowCompound) {
 		int dims = binding.dimensions();
 		binding = binding.leafComponentType();
-
+		
 		// Primitives
-
+		
 		char[] base = null;
-
+		
 		switch (binding.id) {
-			case TypeIds.T_int:
-				base = TypeConstants.INT;
-				break;
-			case TypeIds.T_long:
-				base = TypeConstants.LONG;
-				break;
-			case TypeIds.T_short:
-				base = TypeConstants.SHORT;
-				break;
-			case TypeIds.T_byte:
-				base = TypeConstants.BYTE;
-				break;
-			case TypeIds.T_double:
-				base = TypeConstants.DOUBLE;
-				break;
-			case TypeIds.T_float:
-				base = TypeConstants.FLOAT;
-				break;
-			case TypeIds.T_boolean:
-				base = TypeConstants.BOOLEAN;
-				break;
-			case TypeIds.T_char:
-				base = TypeConstants.CHAR;
-				break;
-			case TypeIds.T_void:
-				base = TypeConstants.VOID;
-				break;
-			case TypeIds.T_null:
-				return null;
+		case TypeIds.T_int:
+			base = TypeConstants.INT;
+			break;
+		case TypeIds.T_long:
+			base = TypeConstants.LONG;
+			break;
+		case TypeIds.T_short:
+			base = TypeConstants.SHORT;
+			break;
+		case TypeIds.T_byte:
+			base = TypeConstants.BYTE;
+			break;
+		case TypeIds.T_double:
+			base = TypeConstants.DOUBLE;
+			break;
+		case TypeIds.T_float:
+			base = TypeConstants.FLOAT;
+			break;
+		case TypeIds.T_boolean:
+			base = TypeConstants.BOOLEAN;
+			break;
+		case TypeIds.T_char:
+			base = TypeConstants.CHAR;
+			break;
+		case TypeIds.T_void:
+			base = TypeConstants.VOID;
+			break;
+		case TypeIds.T_null:
+			return null;
 		}
-
+		
 		if (base != null) {
 			if (dims > 0) {
 				TypeReference result = new ArrayTypeReference(base, dims, pos(pos));
@@ -131,23 +386,22 @@ public class CompilerExtensions {
 			TypeReference result = new SingleTypeReference(base, pos(pos));
 			return result;
 		}
-
+		
 		if (binding.isAnonymousType()) {
-			ReferenceBinding ref = (ReferenceBinding) binding;
+			ReferenceBinding ref = (ReferenceBinding)binding;
 			ReferenceBinding[] supers = ref.superInterfaces();
-			if (supers == null || supers.length == 0)
-				supers = new ReferenceBinding[] { ref.superclass() };
+			if (supers == null || supers.length == 0) supers = new ReferenceBinding[] {ref.superclass()};
 			if (supers[0] == null) {
 				TypeReference result = new QualifiedTypeReference(TypeConstants.JAVA_LANG_OBJECT, poss(pos, 3));
 				return result;
 			}
-			return makeTypeReference(supers[0], pos, false);
+			return makeType(supers[0], pos, false);
 		}
-
+		
 		if (binding instanceof CaptureBinding) {
-			return makeTypeReference(((CaptureBinding) binding).wildcard, pos, allowCompound);
+			return makeType(((CaptureBinding)binding).wildcard, pos, allowCompound);
 		}
-
+		
 		if (binding.isUnboundWildcard()) {
 			if (!allowCompound) {
 				TypeReference result = new QualifiedTypeReference(TypeConstants.JAVA_LANG_OBJECT, poss(pos, 3));
@@ -159,22 +413,22 @@ public class CompilerExtensions {
 				return out;
 			}
 		}
-
+		
 		if (binding.isWildcard()) {
 			WildcardBinding wildcard = (WildcardBinding) binding;
 			if (wildcard.boundKind == Wildcard.EXTENDS) {
 				if (!allowCompound) {
-					return makeTypeReference(wildcard.bound, pos, false);
+					return makeType(wildcard.bound, pos, false);
 				} else {
 					Wildcard out = new Wildcard(Wildcard.EXTENDS);
-					out.bound = makeTypeReference(wildcard.bound, pos, false);
+					out.bound = makeType(wildcard.bound, pos, false);
 					out.sourceStart = pos.sourceStart;
 					out.sourceEnd = pos.sourceEnd;
 					return out;
 				}
 			} else if (allowCompound && wildcard.boundKind == Wildcard.SUPER) {
 				Wildcard out = new Wildcard(Wildcard.SUPER);
-				out.bound = makeTypeReference(wildcard.bound, pos, false);
+				out.bound = makeType(wildcard.bound, pos, false);
 				out.sourceStart = pos.sourceStart;
 				out.sourceEnd = pos.sourceEnd;
 				return out;
@@ -183,38 +437,35 @@ public class CompilerExtensions {
 				return result;
 			}
 		}
-
-		// Keep moving up via 'binding.enclosingType()' and gather generics from each binding. We stop after a local
-		// type, or a static type, or a top-level type.
-		// Finally, add however many nullTypeArgument[] arrays as that are missing, inverse the list, toArray it, and
-		// use that as PTR's typeArgument argument.
-
+		
+		// Keep moving up via 'binding.enclosingType()' and gather generics from each binding. We stop after a local type, or a static type, or a top-level type.
+		// Finally, add however many nullTypeArgument[] arrays as that are missing, inverse the list, toArray it, and use that as PTR's typeArgument argument.
+		
 		List<TypeReference[]> params = new ArrayList<TypeReference[]>();
 		/* Calculate generics */ {
 			TypeBinding b = binding;
 			while (true) {
 				boolean isFinalStop = b.isLocalType() || !b.isMemberType() || b.enclosingType() == null;
-
+				
 				TypeReference[] tyParams = null;
 				if (b instanceof ParameterizedTypeBinding) {
 					ParameterizedTypeBinding paramized = (ParameterizedTypeBinding) b;
 					if (paramized.arguments != null) {
 						tyParams = new TypeReference[paramized.arguments.length];
 						for (int i = 0; i < tyParams.length; i++) {
-							tyParams[i] = makeTypeReference(paramized.arguments[i], pos, true);
+							tyParams[i] = makeType(paramized.arguments[i], pos, true);
 						}
 					}
 				}
-
+				
 				params.add(tyParams);
-				if (isFinalStop)
-					break;
+				if (isFinalStop) break;
 				b = b.enclosingType();
 			}
 		}
-
+		
 		char[][] parts;
-
+		
 		if (binding.isTypeVariable()) {
 			parts = new char[][] { binding.shortReadableName() };
 		} else if (binding.isLocalType()) {
@@ -222,22 +473,18 @@ public class CompilerExtensions {
 		} else {
 			String[] pkg = new String(binding.qualifiedPackageName()).split("\\."); //$NON-NLS-1$
 			String[] name = new String(binding.qualifiedSourceName()).split("\\."); //$NON-NLS-1$
-			if (pkg.length == 1 && pkg[0].isEmpty())
-				pkg = new String[0];
+			if (pkg.length == 1 && pkg[0].isEmpty()) pkg = new String[0];
 			parts = new char[pkg.length + name.length][];
 			int ptr;
-			for (ptr = 0; ptr < pkg.length; ptr++)
-				parts[ptr] = pkg[ptr].toCharArray();
-			for (; ptr < pkg.length + name.length; ptr++)
-				parts[ptr] = name[ptr - pkg.length].toCharArray();
+			for (ptr = 0; ptr < pkg.length; ptr++) parts[ptr] = pkg[ptr].toCharArray();
+			for (; ptr < pkg.length + name.length; ptr++) parts[ptr] = name[ptr - pkg.length].toCharArray();
 		}
-
-		while (params.size() < parts.length)
-			params.add(null);
+		
+		while (params.size() < parts.length) params.add(null);
 		Collections.reverse(params);
-
+		
 		boolean isParamized = false;
-
+		
 		for (TypeReference[] tyParams : params) {
 			if (tyParams != null) {
 				isParamized = true;
@@ -247,14 +494,13 @@ public class CompilerExtensions {
 		if (isParamized) {
 			if (parts.length > 1) {
 				TypeReference[][] typeArguments = params.toArray(new TypeReference[0][]);
-				TypeReference result = new ParameterizedQualifiedTypeReference(parts, typeArguments, dims,
-						poss(pos, parts.length));
+				TypeReference result = new ParameterizedQualifiedTypeReference(parts, typeArguments, dims, poss(pos, parts.length));
 				return result;
 			}
 			TypeReference result = new ParameterizedSingleTypeReference(parts[0], params.get(0), dims, pos(pos));
 			return result;
 		}
-
+		
 		if (dims > 0) {
 			if (parts.length > 1) {
 				TypeReference result = new ArrayQualifiedTypeReference(parts, dims, poss(pos, parts.length));
@@ -263,7 +509,7 @@ public class CompilerExtensions {
 			TypeReference result = new ArrayTypeReference(parts[0], dims, pos(pos));
 			return result;
 		}
-
+		
 		if (parts.length > 1) {
 			TypeReference result = new QualifiedTypeReference(parts, poss(pos, parts.length));
 			return result;
@@ -294,11 +540,20 @@ public class CompilerExtensions {
 		return true;
 	}
 	
+	public static boolean isSingleTypeReference(TypeReference ref, char[] name) {
+		if (!(ref instanceof SingleTypeReference)) return false;
+		return matches(((SingleTypeReference) ref).token, name);
+	}
+	
 	public static final char[] VarName = {'v', 'a', 'r'};
+	public static final char[] VoidName = {'v', 'o', 'i', 'd'};
 
 	public static boolean isVar(TypeReference ref) {
-		if (!(ref instanceof SingleTypeReference)) return false;
-		return Arrays.equals(((SingleTypeReference) ref).token, VarName);
+		return isSingleTypeReference(ref, VarName);
+	}
+
+	public static boolean isVoid(TypeReference ref) {
+		return isSingleTypeReference(ref, VoidName);
 	}
 	
 	public static TypeBinding getForEachComponentType(Expression collection, BlockScope scope) {
@@ -347,7 +602,7 @@ public class CompilerExtensions {
 	}
 	
 	public static void handleVarResolveLocalDeclaration(LocalDeclaration declaration, BlockScope scope) {
-		log("handleVarResolveLocalDeclaration: declaration: " + logObject(declaration)); //$NON-NLS-1$
+		ExtensionsConfig.log("handleVarResolveLocalDeclaration: declaration: " + ExtensionsConfig.asLog(declaration)); //$NON-NLS-1$
 		if (isVar(declaration.type)) {
 			try {
 				TypeBinding binding;
@@ -360,35 +615,35 @@ public class CompilerExtensions {
 				} else {
 					binding = getForEachComponentType(declaration.collectionCopy, scope);
 				}
-				TypeReference type = makeTypeReference(binding, declaration.type, false);		
+				TypeReference type = makeType(binding, declaration.type, false);		
 				declaration.type = type;
 			} catch (NullPointerException e) {
 				// may happen if the parser tries to resolve the declaration before parsing the expression
 				// (e.g. hovering the mouse over "var")
-				log("Cannot resolve initialization"); //$NON-NLS-1$
+				ExtensionsConfig.log("Cannot resolve initialization"); //$NON-NLS-1$
 				e.printStackTrace();
 				TypeReference newType = new QualifiedTypeReference(TypeConstants.JAVA_LANG_OBJECT, poss(declaration.type, 3));	
 				declaration.type = newType;
 			}
-			log("Type inferred: " + declaration.type); //$NON-NLS-1$
+			ExtensionsConfig.log("Type inferred: " + declaration.type); //$NON-NLS-1$
 		}
 	}
 	
 	public static void handleVarResolveForEach(ForeachStatement statement, BlockScope scope) {
-		log("handleVarResolveForEach: statement: " + logObject(statement)); //$NON-NLS-1$
+		ExtensionsConfig.log("handleVarResolveForEach: statement: " + ExtensionsConfig.asLog(statement)); //$NON-NLS-1$
 		if ((statement.elementVariable != null) && isVar(statement.elementVariable.type)) {
 			try {
 				TypeBinding binding = getForEachComponentType(statement.collection, scope);
-				TypeReference type = makeTypeReference(binding, statement.elementVariable.type, false);
+				TypeReference type = makeType(binding, statement.elementVariable.type, false);
 				statement.elementVariable.type = type;
 			} catch (NullPointerException e) {
 				// may happen if the parser tries to resolve the declaration before parsing the expression
 				// (e.g. hovering the mouse over "var")
-				log("Cannot resolve collection"); //$NON-NLS-1$
+				ExtensionsConfig.log("Cannot resolve collection"); //$NON-NLS-1$
 				TypeReference newType = new QualifiedTypeReference(TypeConstants.JAVA_LANG_OBJECT, poss(statement.elementVariable.type, 3));	
 				statement.elementVariable.type = newType;
 			}
-			log("Type inferred: " + statement.elementVariable.type); //$NON-NLS-1$
+			ExtensionsConfig.log("Type inferred: " + statement.elementVariable.type); //$NON-NLS-1$
 		}
 	}
 	
@@ -399,8 +654,8 @@ public class CompilerExtensions {
 		return modifiers;
 	}
 	
-	public static void handleStructPostParse(TypeDeclaration type) {
-		log("handleStructPostParse: declaration: " + logObject(type)); //$NON-NLS-1$
+	public static void handleStructEndParse(TypeDeclaration type) {
+		ExtensionsConfig.log("handleStructEndParse: declaration: " + ExtensionsConfig.asLog(type)); //$NON-NLS-1$
 		if (!type.isStruct) return;
 		type.modifiers = setPublicAccess(type.modifiers);
 		if (type.fields != null) {
@@ -419,18 +674,197 @@ public class CompilerExtensions {
 		if (type.memberTypes != null) {
 			for (TypeDeclaration memberType: type.memberTypes) {
 				memberType.modifiers = setPublicAccess(memberType.modifiers); // public even if not a struct
-				handleStructPostParse(memberType);
+				handleStructEndParse(memberType);
 			}
 		}
 	}
 	
-	public static void handleStructPostParse(CompilationUnitDeclaration unit) {
-		log("handleStructPostParse: unit: " + logObject(unit)); //$NON-NLS-1$
+	public static void handleStructEndParse(CompilationUnitDeclaration unit) {
+		ExtensionsConfig.log("handleStructEndParse: unit: " + ExtensionsConfig.asLog(unit)); //$NON-NLS-1$
 		if (unit.types != null) {
 			for (TypeDeclaration type: unit.types) {
-				handleStructPostParse(type);
+				handleStructEndParse(type);
 			}
 		}
+	}
+	
+	public static Argument copyArgument(Argument argument) {
+		Argument copy = null;
+		if (argument instanceof SelectionOnArgumentName) {
+			SelectionOnArgumentName original = (SelectionOnArgumentName) argument;
+			copy = new SelectionOnArgumentName(original.name, pos(original), copyType(original.type), original.modifiers);
+			
+		} else if (argument instanceof CompletionOnArgumentName) {
+			CompletionOnArgumentName original = (CompletionOnArgumentName) argument;
+			copy = new CompletionOnArgumentName(original.name, pos(original), copyType(original.type), original.modifiers);
+		} else {
+			Argument original = argument;			
+			copy = new Argument(original.name, pos(original), copyType(original.type), original.modifiers);
+		}
+		copy.bits = argument.bits;
+		copy.declarationSourceStart = argument.declarationSourceStart;
+		copy.modifiersSourceStart = argument.modifiersSourceStart;
+		copy.annotations = copyAnnotations(argument, argument.annotations);
+	    return copy;
+	}
+	
+	public static void copyAbstractMethod(AbstractMethodDeclaration method, AbstractMethodDeclaration copy) {
+		copy.bits = method.bits | GeneratedBit;
+		copy.selector = method.selector;
+		copy.modifiers = method.modifiers;
+		copy.declarationSourceStart = method.declarationSourceStart;
+		copy.declarationSourceEnd = method.declarationSourceEnd;
+		copy.sourceStart = method.sourceStart;
+		copy.sourceEnd = method.sourceEnd;
+		copy.bodyStart = method.bodyStart;
+		copy.bodyEnd = method.bodyEnd;
+		copy.modifiersSourceStart = method.modifiersSourceStart;
+		copy.explicitDeclarations = method.explicitDeclarations;
+		copy.thrownExceptions = copyTypes(method.thrownExceptions);
+		copy.annotations = copyAnnotations(method, method.annotations);
+		copy.javadoc = method.javadoc;
+	}
+	
+	public static MethodDeclaration copyMethod(MethodDeclaration method) {
+		MethodDeclaration copy = new MethodDeclaration(method.compilationResult);
+		copyAbstractMethod(method, copy);
+		copy.typeParameters = copyTypeParams(method.typeParameters, method);
+		copy.returnType = copyType(method.returnType);
+		return copy;
+	}	
+	
+	public static ConstructorDeclaration copyConstructor(ConstructorDeclaration constructor) {
+		ConstructorDeclaration copy = new ConstructorDeclaration(constructor.compilationResult);
+		copyAbstractMethod(constructor, copy);
+		copy.typeParameters = copyTypeParams(constructor.typeParameters, constructor);		
+		return copy;
+	}
+	
+	public static Statement generateDefaultArgumentsCall(MethodDeclaration method, MethodDeclaration copy, int startIndex) {
+		int startPos = copy.bodyStart, endPos = copy.bodyEnd;
+		MessageSend message = new MessageSend();
+		message.sourceStart = startPos;
+		message.sourceEnd = endPos;
+		message.statementEnd = endPos;
+		message.receiver = ThisReference.implicitThis();
+		message.receiver.sourceStart = startPos;
+		message.receiver.sourceEnd = endPos;	
+		message.receiver.statementEnd = endPos;
+		message.nameSourcePosition = pos(startPos, endPos);
+		message.selector = method.selector;
+		message.arguments = new Expression[method.arguments.length];
+		for (int i = 0; i < message.arguments.length; i++) {
+				Argument argument = method.arguments[i];
+			if (i < startIndex) {
+				message.arguments[i] = new SingleNameReference(argument.name, pos(startPos, endPos));
+			} else {
+				message.arguments[i] = argument.defaultExpression;
+			}
+		}
+		if (!isVoid(copy.returnType)) {
+			return new ReturnStatement(message, copy.bodyStart, copy.bodyEnd);
+		}
+		return message;
+	}
+	
+	public static int handleDefaultArgumentsEndParse(MethodDeclaration method, AbstractMethodDeclaration[] methods, int index) {
+		for (int i = method.arguments.length - 1; i >= 0; i--) {
+			Argument argument = method.arguments[i];
+			if (argument.defaultExpression == null) break;
+			MethodDeclaration copy = copyMethod(method);
+			if (i > 0) {
+				copy.arguments = new Argument[i];
+				for (int j = 0; j < i; j++) {
+					copy.arguments[j] = copyArgument(method.arguments[j]);
+				}
+			}
+			copy.statements = new Statement[1];
+			copy.statements[0] = generateDefaultArgumentsCall(method, copy, i);
+			methods[index++] = copy;
+		}
+		return index;
+	}
+	
+	public static ExplicitConstructorCall generateDefaultArgumentsCall(ConstructorDeclaration constructor, ConstructorDeclaration copy, int startIndex) {
+		int startPos = copy.bodyStart, endPos = copy.bodyEnd;
+		ExplicitConstructorCall call = new ExplicitConstructorCall(ExplicitConstructorCall.This);
+		call.sourceStart = startPos;
+		call.sourceEnd = endPos;
+		call.arguments = new Expression[constructor.arguments.length];
+		for (int i = 0; i < call.arguments.length; i++) {
+				Argument argument = constructor.arguments[i];
+			if (i < startIndex) {
+				call.arguments[i] = new SingleNameReference(argument.name, pos(startPos, endPos));
+			} else {
+				call.arguments[i] = argument.defaultExpression;
+			}
+		}
+		return call;
+	}
+	
+	public static int handleDefaultArgumentsEndParse(ConstructorDeclaration constructor, AbstractMethodDeclaration[] methods, int index) {
+		for (int i = constructor.arguments.length - 1; i >= 0; i--) {
+			Argument argument = constructor.arguments[i];
+			if (argument.defaultExpression == null) break;
+			ConstructorDeclaration copy = copyConstructor(constructor);
+			if (i > 0) {
+				copy.arguments = new Argument[i];
+				for (int j = 0; j < i; j++) {
+					copy.arguments[j] = copyArgument(constructor.arguments[j]);
+				}
+			}
+			copy.constructorCall = generateDefaultArgumentsCall(constructor, copy, i);
+			methods[index++] = copy;
+		}
+		return index;
+	}
+	
+	public static void handleDefaultArgumentsEndParse(CompilationUnitDeclaration unit) {
+		ExtensionsConfig.log("handleDefaultArgumentsEndParse: unit: " + ExtensionsConfig.asLog(unit)); //$NON-NLS-1$
+		if (unit.types != null) {
+			for (TypeDeclaration type: unit.types) {
+				if (type.methods == null) continue;
+				int numDefaultArguments = 0;
+				for (int i = 0; i < type.methods.length; i++) {
+					AbstractMethodDeclaration method = type.methods[i];
+					if (method.arguments == null) continue;
+					for (int j = method.arguments.length - 1; j >= 0; j--) {
+						Argument argument = method.arguments[j];
+						if (argument.defaultExpression == null) break;
+						numDefaultArguments += 1;			
+					}
+				}
+				if (numDefaultArguments == 0) continue;
+				AbstractMethodDeclaration[] methods = new AbstractMethodDeclaration[type.methods.length + numDefaultArguments];
+				System.arraycopy(type.methods, 0, methods, 0, type.methods.length);
+				for (int i = 0, j = type.methods.length; i < type.methods.length; i++) {
+					AbstractMethodDeclaration method = type.methods[i];	
+					if (method.arguments == null) continue;
+					if (method instanceof MethodDeclaration) {
+						j = handleDefaultArgumentsEndParse((MethodDeclaration) method, methods, j);
+					} else if (method instanceof ConstructorDeclaration) {
+						j = handleDefaultArgumentsEndParse((ConstructorDeclaration) method, methods, j);
+					}
+				}
+				type.methods = methods;
+			}
+		}
+	}
+	
+	public static final int ProcessedBit = ASTNode.Bit24;
+	
+	public static void handleEndParse(CompilationUnitDeclaration unit) {
+		if ((unit.bits & ProcessedBit) == 0) {
+			handleStructEndParse(unit);
+			handleDefaultArgumentsEndParse(unit);
+			unit.bits |= ProcessedBit;
+		}
+	}
+	
+	public static final int GeneratedBit = ASTNode.Bit24;
+	
+	public static boolean isGeneratedMethod(AbstractMethodDeclaration method) {
+		return (method.bits & GeneratedBit) != 0;
 	}
 	
 	public static char[][] buildName(char[][] base, char[] ...names) {
@@ -457,14 +891,13 @@ public class CompilerExtensions {
 	}
 	
 	public static final char[][] ExtensionsPackageName = asChars("org", "eclipse", "jdt", "annotation", "extensions"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
-	public static final char[][] ConditionalAnnotationName = buildName(ExtensionsPackageName, asChars("Conditional")); //$NON-NLS-1$
-	public static final char[][] OptionalParameterName = buildName(ExtensionsPackageName, asChars("Optional")); //$NON-NLS-1$
-	public static final char[][] CallerFileAnnotationName = buildName(ExtensionsPackageName, asChars("CallerFile")); //$NON-NLS-1$
-	public static final char[][] CallerLineAnnotationName = buildName(ExtensionsPackageName, asChars("CallerLine")); //$NON-NLS-1$
-	public static final char[][] CallerClassAnnotationName = buildName(ExtensionsPackageName, asChars("CallerClass")); //$NON-NLS-1$
-	public static final char[][] CallerMethodAnnotationName = buildName(ExtensionsPackageName, asChars("CallerMethod")); //$NON-NLS-1$
-	public static final char[][] CallerArgAnnotationName = buildName(ExtensionsPackageName, asChars("CallerArg")); //$NON-NLS-1$	
-	public static final char[][][] SyntheticAnnotationNames = {CallerFileAnnotationName, CallerLineAnnotationName, CallerClassAnnotationName, CallerMethodAnnotationName, CallerArgAnnotationName };	
+	public static final char[][] CallIfAnnotationName = buildName(ExtensionsPackageName, asChars("CallIf")); //$NON-NLS-1$
+	public static final char[][] CallFileAnnotationName = buildName(ExtensionsPackageName, asChars("CallFile")); //$NON-NLS-1$
+	public static final char[][] CallLineAnnotationName = buildName(ExtensionsPackageName, asChars("CallLine")); //$NON-NLS-1$
+	public static final char[][] CallClassAnnotationName = buildName(ExtensionsPackageName, asChars("CallClass")); //$NON-NLS-1$
+	public static final char[][] CallMethodAnnotationName = buildName(ExtensionsPackageName, asChars("CallMethod")); //$NON-NLS-1$
+	public static final char[][] CallArgAnnotationName = buildName(ExtensionsPackageName, asChars("CallArg")); //$NON-NLS-1$	
+	public static final char[][][] SyntheticAnnotationNames = {CallFileAnnotationName, CallLineAnnotationName, CallClassAnnotationName, CallMethodAnnotationName, CallArgAnnotationName };	
 	public static final char[] ValueAnnotationParamName = asChars("value"); //$NON-NLS-1$
 	
 	public static boolean isSyntheticParameterAnnotation(AnnotationBinding annotation) {
@@ -476,32 +909,28 @@ public class CompilerExtensions {
 		return false;
 	}
 	
-	public static boolean isConditionalAnnotation(AnnotationBinding annotation) {
-		return matches(ConditionalAnnotationName, annotation.getAnnotationType().compoundName);
+	public static boolean isCallIfAnnotation(AnnotationBinding annotation) {
+		return matches(CallIfAnnotationName, annotation.getAnnotationType().compoundName);
 	}
 	
-	public static boolean isOptionalAnnotation(AnnotationBinding annotation) {
-		return matches(OptionalParameterName, annotation.getAnnotationType().compoundName);
+	public static boolean isCallFileAnnotation(AnnotationBinding annotation) {
+		return matches(CallFileAnnotationName, annotation.getAnnotationType().compoundName);
 	}
 	
-	public static boolean isCallerFileAnnotation(AnnotationBinding annotation) {
-		return matches(CallerFileAnnotationName, annotation.getAnnotationType().compoundName);
+	public static boolean isCallLineAnnotation(AnnotationBinding annotation) {
+		return matches(CallLineAnnotationName, annotation.getAnnotationType().compoundName);
 	}
 	
-	public static boolean isCallerLineAnnotation(AnnotationBinding annotation) {
-		return matches(CallerLineAnnotationName, annotation.getAnnotationType().compoundName);
+	public static boolean isCallClassAnnotation(AnnotationBinding annotation) {
+		return matches(CallClassAnnotationName, annotation.getAnnotationType().compoundName);
 	}
 	
-	public static boolean isCallerClassAnnotation(AnnotationBinding annotation) {
-		return matches(CallerClassAnnotationName, annotation.getAnnotationType().compoundName);
+	public static boolean isCallMethodAnnotation(AnnotationBinding annotation) {
+		return matches(CallMethodAnnotationName, annotation.getAnnotationType().compoundName);
 	}
 	
-	public static boolean isCallerMethodAnnotation(AnnotationBinding annotation) {
-		return matches(CallerMethodAnnotationName, annotation.getAnnotationType().compoundName);
-	}
-	
-	public static boolean isCallerArgAnnotation(AnnotationBinding annotation) {
-		return matches(CallerArgAnnotationName, annotation.getAnnotationType().compoundName);
+	public static boolean isCallArgAnnotation(AnnotationBinding annotation) {
+		return matches(CallArgAnnotationName, annotation.getAnnotationType().compoundName);
 	}
 	
 	public static char[] extractChars(char[] source, int start, int end) {
@@ -544,7 +973,7 @@ public class CompilerExtensions {
 		initSyntheticParameterAnnotations(method);		
 		int numSyntheticAnnotations = method.numSyntheticAnnotations;
 		if (numSyntheticAnnotations == 0) return arguments;
-		log("handleSyntheticParametersForCompatibility: method: " + asString(method.selector) + ": adding " +  //$NON-NLS-1$//$NON-NLS-2$
+		ExtensionsConfig.log("handleSyntheticParametersForCompatibility: method: " + asString(method.selector) + ": adding " +  //$NON-NLS-1$//$NON-NLS-2$
 				numSyntheticAnnotations + " synthetic arguments"); //$NON-NLS-1$ 
 		AnnotationBinding[] syntheticAnnotations = method.syntheticAnnotations;
 		TypeBinding[] result = new TypeBinding[arguments.length + numSyntheticAnnotations];
@@ -573,50 +1002,9 @@ public class CompilerExtensions {
 			}
 		}
 		char[] newMethodSignature = Signature.createMethodSignature(newParameterTypes, Signature.getReturnType(methodSignature));
-		log("handleSyntheticParametersForSignature: old signature: " + asString(methodSignature) + //$NON-NLS-1$
+		ExtensionsConfig.log("handleSyntheticParametersForSignature: old signature: " + asString(methodSignature) + //$NON-NLS-1$
 				", new signature: " + asString(newMethodSignature)); //$NON-NLS-1$
 		return newMethodSignature;
-	}
-	
-	// lazily counts and stores optional annotations for method parameters
-	public static void initOptionalParameterAnnotations(MethodBinding method) {
-		method = method.original();
-		if (method.numOptionalAnnotations >= 0) return; // already done
-		method.numOptionalAnnotations = 0;
-		AnnotationBinding[][] parameterAnnotations = method.getParameterAnnotations();
-		if (parameterAnnotations == null) return;
-		method.optionalAnnotations = new AnnotationBinding[parameterAnnotations.length];
-		for (int i = parameterAnnotations.length - 1; i >= 0; i--) { // start from the end
-			AnnotationBinding[] annotations = parameterAnnotations[i];
-			AnnotationBinding annotation = null;
-			for (int j = 0; j < annotations.length; j++) {
-				if (isOptionalAnnotation(annotations[j])) {
-					annotation = annotations[j];
-					break;
-				}
-			}
-			if (annotation == null) break; // ignore further annotations
-			method.numOptionalAnnotations += 1;
-			method.optionalAnnotations[i] = annotation;
-		}
-	}
-	
-	// adds any missing optional argument types (for compatibility checks)
-	public static TypeBinding[] handleOptionalParametersForCompatibility(MethodBinding method, TypeBinding[] arguments) {
-		method = method.original();
-		if (arguments == null) arguments = new TypeBinding[0];
-		TypeBinding[] parameters = method.parameters;
-		initOptionalParameterAnnotations(method);
-		if ((parameters == null) || (arguments.length >= parameters.length)) return arguments; // already have enough arguments
-		int numOptionalAnnotations = method.numOptionalAnnotations;
-		int numMissingArguments = parameters.length - arguments.length;
-		if (numMissingArguments > numOptionalAnnotations) return arguments; // not enough optional arguments
-		log("handleOptionalParametersForCompatibility: method: " + asString(method.selector) + ": adding " + //$NON-NLS-1$ //$NON-NLS-2$
-				numMissingArguments + " missing optional arguments"); //$NON-NLS-1$ 
-		TypeBinding[] result = new TypeBinding[parameters.length];
-		System.arraycopy(arguments, 0, result, 0, arguments.length);
-		System.arraycopy(parameters, arguments.length, result, arguments.length, numMissingArguments);
-		return result;
 	}
 	
 	public static final char[] ZeroChars = {'0'};
@@ -637,19 +1025,17 @@ public class CompilerExtensions {
 		return new NullLiteral(s, e);
 	}
 	
-	public static Expression makeCallerFile(Expression expression, BlockScope scope) {
-		int position = expression.sourceEnd;
+	public static Expression makeCallFile(Invocation invocation, Scope scope) {
+		int position = invocation.sourceEnd();
 		ClassScope classScope = scope.classScope();
 		if (classScope == null) return new NullLiteral(position, position);
 		CompilationUnitDeclaration compilationUnit = classScope.referenceCompilationUnit();
 		if (compilationUnit == null) return new NullLiteral(position, position);
-		int[] separatorPositions = compilationUnit.compilationResult().getLineSeparatorPositions();
-		int lineNumber = Util.getLineNumber(position, separatorPositions, 0, separatorPositions.length - 1);
-		return new StringLiteral(compilationUnit.getFileName(), position, position, lineNumber);
+		return new StringLiteral(compilationUnit.getFileName(), position, position, 0);
 	}
 	
-	public static Expression makeCallerLineExpression(Expression expression, BlockScope scope) {
-		int position = expression.sourceEnd;
+	public static Expression makeCallLineExpression(Invocation invocation, Scope scope) {
+		int position = invocation.sourceEnd();
 		ClassScope classScope = scope.classScope();
 		if (classScope == null) return new NullLiteral(position, position);
 		CompilationUnitDeclaration compilationUnit = classScope.referenceCompilationUnit();
@@ -659,46 +1045,39 @@ public class CompilerExtensions {
 		return IntLiteral.buildIntLiteral(asChars(Integer.toString(lineNumber)), position, position);
 	}
 	
-	public static Expression makeCallerClassExpression(Expression expression, BlockScope scope) {
-		int position = expression.sourceEnd;
+	public static Expression makeCallClassExpression(Invocation invocation, Scope scope) {
+		int position = invocation.sourceEnd();
 		ClassScope classScope = scope.classScope();
 		if (classScope == null) return new NullLiteral(position, position);
 		CompilationUnitDeclaration compilationUnit = classScope.referenceCompilationUnit();
 		if (compilationUnit == null) return new NullLiteral(position, position);
-		int[] separatorPositions = compilationUnit.compilationResult().getLineSeparatorPositions();
-		int lineNumber = Util.getLineNumber(position, separatorPositions, 0, separatorPositions.length - 1);
-		return new StringLiteral(classScope.referenceContext.name, position, position, lineNumber);
+		return new StringLiteral(classScope.referenceContext.name, position, position, 0);
 	}
 	
-	public static Expression makeCallerMethodExpression(Expression expression, BlockScope scope) {
-		int position = expression.sourceEnd;
+	public static Expression makeCallMethodExpression(Invocation invocation, Scope scope) {
+		int position = invocation.sourceEnd();
 		ClassScope classScope = scope.classScope();
 		if (classScope == null) return new NullLiteral(position, position);
 		CompilationUnitDeclaration compilationUnit = classScope.referenceCompilationUnit();
 		if (compilationUnit == null) return new NullLiteral(position, position);
-		int[] separatorPositions = compilationUnit.compilationResult().getLineSeparatorPositions();
-		int lineNumber = Util.getLineNumber(position, separatorPositions, 0, separatorPositions.length - 1);
 		MethodScope methodScope = scope.methodScope();
 		if (methodScope == null) return new NullLiteral(position, position);
 		AbstractMethodDeclaration declaration = methodScope.referenceMethod();
 		if (declaration == null) return new NullLiteral(position, position);
-		return new StringLiteral(declaration.selector, position, position, lineNumber);
+		return new StringLiteral(declaration.selector, position, position, 0);
 	}
 	
-	public static Expression makeCallerArgExpression(Expression expression, BlockScope scope, int index) {
-		Invocation invocation = (Invocation) expression;
-		int position = expression.sourceEnd;
+	public static Expression makeCallArgExpression(Invocation invocation, Scope scope, int index) {
+		int position = invocation.sourceEnd();
 		ClassScope classScope = scope.classScope();
 		if (classScope == null) return new NullLiteral(position, position);
 		CompilationUnitDeclaration compilationUnit = classScope.referenceCompilationUnit();
 		if (compilationUnit == null) return new NullLiteral(position, position);
-		int[] separatorPositions = compilationUnit.compilationResult().getLineSeparatorPositions();
-		int lineNumber = Util.getLineNumber(position, separatorPositions, 0, separatorPositions.length - 1);
 		if ((index < 0) || (index >= invocation.arguments().length)) return new NullLiteral(position, position);
 		Expression argument = invocation.arguments()[index];
 		char[] contents = compilationUnit.compilationResult().compilationUnit.getContents();
 		char[] argumentChars = extractChars(contents, argument.sourceStart, argument.sourceEnd);
-		return new StringLiteral(argumentChars, position, position, lineNumber);		
+		return new StringLiteral(argumentChars, position, position, 0);		
 	}
 	
 	public static Object getAnnotationParam(AnnotationBinding annotation, char[] name) {		
@@ -740,20 +1119,29 @@ public class CompilerExtensions {
 		}
 	}
 	
+	public static TypeBinding resolveType(Expression expression, Scope scope) {
+		if (scope instanceof BlockScope) {
+			return expression.resolveType((BlockScope) scope);
+		} else if (scope instanceof ClassScope) {
+			return expression.resolveType((ClassScope) scope);
+		}
+		return null;
+	}
+	
 	// adds synthetic arguments required to invoke the method
-	public static boolean handleSyntheticArgumentsForInvocation(Expression invocation, InvocationArguments invocationArguments, MethodBinding method, BlockScope scope) {
+	public static void handleSyntheticArgumentsForInvocation(Invocation invocation, InvocationArguments invocationArguments, MethodBinding method, Scope scope) {
+		if (!method.isValidBinding()) return;
 		method = method.original();
-		if (!method.isValidBinding()) return false;
 		TypeBinding[] parameters = method.parameters;
 		Expression[] oldArguments = invocationArguments.arguments;
 		if (oldArguments == null) oldArguments = new Expression[0];
 		TypeBinding[] oldArgumentTypes = invocationArguments.argumentTypes;
 		if (oldArgumentTypes == null) oldArgumentTypes = new TypeBinding[0];
-		if (parameters == null) return false;
+		if (parameters == null) return;
 		initSyntheticParameterAnnotations(method);
 		int numSyntheticAnnotations = method.numSyntheticAnnotations;
-		if (numSyntheticAnnotations == 0) return false;
-		log("handleSyntheticArgumentsForInvocation: method: " + asString(method.selector) + ": adding " + //$NON-NLS-1$ //$NON-NLS-2$
+		if (numSyntheticAnnotations == 0) return;
+		ExtensionsConfig.log("handleSyntheticArgumentsForInvocation: method: " + asString(method.selector) + ": adding " + //$NON-NLS-1$ //$NON-NLS-2$
 				numSyntheticAnnotations + " synthetic arguments"); //$NON-NLS-1$
 		AnnotationBinding[] syntheticAnnotations = method.syntheticAnnotations;
 		Expression[] newArguments = new Expression[oldArguments.length + numSyntheticAnnotations];
@@ -763,102 +1151,62 @@ public class CompilerExtensions {
 				newArguments[i] = oldArguments[j];
 				newArgumentTypes[i] = oldArgumentTypes[j++];
 			} else {
-				AnnotationBinding annotation = syntheticAnnotations[i];				
-				if (isCallerFileAnnotation(annotation)) {
-					newArguments[i] = makeCallerFile(invocation, scope);
-				} else if (isCallerLineAnnotation(annotation)) {
-					newArguments[i] = makeCallerLineExpression(invocation, scope);
-				} else if (isCallerClassAnnotation(annotation)) {
-					newArguments[i] = makeCallerClassExpression(invocation, scope);
-				} else if (isCallerMethodAnnotation(annotation)) {
-					newArguments[i] = makeCallerMethodExpression(invocation, scope);
-				} else if (isCallerArgAnnotation(annotation)) {
-					int index = getIntAnnotationParam(annotation, ValueAnnotationParamName);
-					newArguments[i] = makeCallerArgExpression(invocation, scope, index);
+				AnnotationBinding annotation = syntheticAnnotations[i];
+				if (isCallFileAnnotation(annotation)) {
+					newArguments[i] = makeCallFile(invocation, scope);
+				} else if (isCallLineAnnotation(annotation)) {
+					newArguments[i] = makeCallLineExpression(invocation, scope);
+				} else if (isCallClassAnnotation(annotation)) {
+					newArguments[i] = makeCallClassExpression(invocation, scope);
+				} else if (isCallMethodAnnotation(annotation)) {
+					newArguments[i] = makeCallMethodExpression(invocation, scope);
+				} else if (isCallArgAnnotation(annotation)) {
+					int index = j;
+					newArguments[i] = makeCallArgExpression(invocation, scope, index);
 				} else {
-					newArguments[i] = makeDefaultLiteral(method.parameters[i], invocation.sourceEnd, invocation.sourceEnd);
+					newArguments[i] = makeDefaultLiteral(method.parameters[i], invocation.sourceEnd(), invocation.sourceEnd());
 				}
-				newArgumentTypes[i] = newArguments[i].resolveType(scope);
-				if (newArgumentTypes[i] == null) return false; // cannot resolve a basic literal??				
+				newArgumentTypes[i] = resolveType(newArguments[i], scope);
+				TypeBinding parameterType = method.parameters[i];
+				if ((newArgumentTypes[i] == null) || !parameterType.isCompatibleWith(newArgumentTypes[i], scope)) {
+					newArguments[i] = makeDefaultLiteral(method.parameters[i], invocation.sourceEnd(), invocation.sourceEnd());
+					newArgumentTypes[i] = resolveType(newArguments[i], scope);
+				}
 			}
 		}
 		invocationArguments.arguments = newArguments;
 		invocationArguments.argumentTypes = newArgumentTypes;
-		return true;
 	}
 	
 	// adds synthetic arguments required to invoke the method
-	public static void handleSyntheticArgumentsForMessageSend(MessageSend invocation, BlockScope scope) {
+	public static void handleSyntheticArgumentsForMessageSend(MessageSend invocation, Scope scope) {
 		InvocationArguments invocationArguments = new InvocationArguments(invocation.arguments, invocation.argumentTypes);
-		if (handleSyntheticArgumentsForInvocation(invocation, invocationArguments, invocation.binding, scope)) {			
-			invocation.arguments = invocationArguments.arguments;
-			invocation.argumentTypes = invocationArguments.argumentTypes;
-		}
+		handleSyntheticArgumentsForInvocation(invocation, invocationArguments, invocation.binding, scope);		
+		invocation.arguments = invocationArguments.arguments;
+		invocation.argumentTypes = invocationArguments.argumentTypes;		
 	}
 	
 	// adds synthetic arguments required to invoke the method
-	public static void handleSyntheticArgumentsForAllocation(AllocationExpression invocation, BlockScope scope) {
+	public static void handleSyntheticArgumentsForAllocation(AllocationExpression invocation, Scope scope) {
 		InvocationArguments invocationArguments = new InvocationArguments(invocation.arguments, invocation.argumentTypes);
-		if (handleSyntheticArgumentsForInvocation(invocation, invocationArguments, invocation.binding, scope)) {			
-			invocation.arguments = invocationArguments.arguments;
-			invocation.argumentTypes = invocationArguments.argumentTypes;
-		}
+		handleSyntheticArgumentsForInvocation(invocation, invocationArguments, invocation.binding, scope);		
+		invocation.arguments = invocationArguments.arguments;
+		invocation.argumentTypes = invocationArguments.argumentTypes;
 	}
 	
-	// adds non-provided optional arguments required to invoke the method
-	public static boolean handleOptionalArgumentsForInvocation(Expression invocation, InvocationArguments invocationArguments, MethodBinding method, BlockScope scope) {
-		method = method.original();
-		if (!method.isValidBinding()) return false;
-		TypeBinding[] parameters = method.parameters;
-		Expression[] oldArguments = invocationArguments.arguments;
-		if (oldArguments == null) oldArguments = new Expression[0];
-		TypeBinding[] oldArgumentTypes = invocationArguments.argumentTypes;
-		if (oldArgumentTypes == null) oldArgumentTypes = new TypeBinding[0];
-		initOptionalParameterAnnotations(method);
-		if ((parameters == null) || (oldArguments.length >= parameters.length)) return false; // already have enough arguments
-		int numMissingArguments = parameters.length - oldArguments.length;
-		if (numMissingArguments > method.numOptionalAnnotations) return false; // should not happen after compatibility checks
-		log("handleOptionalArgumentsForInvocation: method: " + asString(method.selector) + ": adding " + //$NON-NLS-1$ //$NON-NLS-2$
-				numMissingArguments + " missing optional arguments"); //$NON-NLS-1$ 
-		Expression[] newArguments = new Expression[parameters.length];
-		System.arraycopy(oldArguments, 0, newArguments, 0, oldArguments.length);
-		TypeBinding[] newArgumentTypes = new TypeBinding[parameters.length];
-		System.arraycopy(oldArgumentTypes, 0, newArgumentTypes, 0, oldArgumentTypes.length);
-		for (int i = oldArguments.length; i < parameters.length; i++) {
-			AnnotationBinding annotation = method.optionalAnnotations[i];
-			if (annotation == null) return false; // should not happen after compatibility checks
-			newArguments[i] = makeDefaultLiteral(method.parameters[i], invocation.sourceEnd, invocation.sourceEnd);
-			newArgumentTypes[i] = newArguments[i].resolveType(scope);
-			if (newArgumentTypes[i] == null) return false; // cannot resolve a basic literal??
-		}
-		invocationArguments.arguments = newArguments;
-		invocationArguments.argumentTypes = newArgumentTypes;
-		return true;
-	}
-	
-	// adds non-provided optional arguments required to invoke the method
-	public static void handleOptionalArgumentsForMessageSend(MessageSend invocation, BlockScope scope) {
-		InvocationArguments invocationArguments = new InvocationArguments(invocation.arguments, invocation.argumentTypes);
-		if (handleOptionalArgumentsForInvocation(invocation, invocationArguments, invocation.binding, scope)) {			
-			invocation.arguments = invocationArguments.arguments;
-			invocation.argumentTypes = invocationArguments.argumentTypes;
-		}
-	}
-	
-	// adds non-provided optional arguments required to invoke the method
-	public static void handleOptionalArgumentsForAllocation(AllocationExpression invocation, BlockScope scope) {
-		InvocationArguments invocationArguments = new InvocationArguments(invocation.arguments, invocation.argumentTypes);
-		if (handleOptionalArgumentsForInvocation(invocation, invocationArguments, invocation.binding, scope)) {			
-			invocation.arguments = invocationArguments.arguments;
-			invocation.argumentTypes = invocationArguments.argumentTypes;
-		}
+	// adds synthetic arguments required to invoke the method
+	public static TypeBinding[] handleSyntheticArgumentsForConstructorCall(ExplicitConstructorCall invocation, Scope scope, TypeBinding[] argumentTypes) {
+		InvocationArguments invocationArguments = new InvocationArguments(invocation.arguments, argumentTypes);
+		handleSyntheticArgumentsForInvocation(invocation, invocationArguments, invocation.binding, scope);			
+		invocation.arguments = invocationArguments.arguments;
+		return invocationArguments.argumentTypes;
 	}
 	
 	public static boolean isMessageSendDisabled(MethodBinding method) {
 		AnnotationBinding[] annotations = method.getAnnotations();
 		if (annotations == null) return false;
 		for (AnnotationBinding annotation: annotations) {
-			if (isConditionalAnnotation(annotation)) {
+			if (isCallIfAnnotation(annotation)) {
 				boolean enabled = getBooleanAnnotationParam(annotation, ValueAnnotationParamName);
 				return !enabled;
 			}

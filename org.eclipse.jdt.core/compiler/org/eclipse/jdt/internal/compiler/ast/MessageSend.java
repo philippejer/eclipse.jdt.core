@@ -737,16 +737,15 @@ public TypeBinding resolveType(BlockScope scope) {
 	}
 	
 	TypeBinding methodType = findMethodBinding(scope);
+	
+	if (ExtensionsConfig.ENABLE) {
+		CompilerExtensions.handleSyntheticArgumentsForMessageSend(this, scope);
+	}
+
 	if (methodType != null && methodType.isPolyType()) {
 		this.resolvedType = this.binding.returnType.capture(scope, this.sourceStart, this.sourceEnd);
 		return methodType;
 	}
-	
-	if (ExtensionsConfig.ENABLE) {
-		CompilerExtensions.handleSyntheticArgumentsForMessageSend(this, scope);		
-		CompilerExtensions.handleOptionalArgumentsForMessageSend(this, scope);
-	}
-
 	if (!this.binding.isValidBinding()) {
 		if (this.binding.declaringClass == null) {
 			if (this.actualReceiverType instanceof ReferenceBinding) {

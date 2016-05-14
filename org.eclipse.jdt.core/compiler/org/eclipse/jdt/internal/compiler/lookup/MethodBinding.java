@@ -72,8 +72,6 @@ public class MethodBinding extends Binding {
 	
 	public AnnotationBinding[] syntheticAnnotations = null;
 	public int numSyntheticAnnotations = -1;
-	public AnnotationBinding[] optionalAnnotations = null;
-	public int numOptionalAnnotations = -1;
 
 protected MethodBinding() {
 	// for creating problem or synthetic method

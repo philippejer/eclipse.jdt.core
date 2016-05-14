@@ -28,6 +28,8 @@ package org.eclipse.jdt.internal.compiler.ast;
 import java.util.List;
 
 import org.eclipse.jdt.core.compiler.CharOperation;
+import org.eclipse.jdt.core.extensions.ExtensionsConfig;
+import org.eclipse.jdt.core.internal.compiler.extensions.CompilerExtensions;
 import org.eclipse.jdt.internal.compiler.ASTVisitor;
 import org.eclipse.jdt.internal.compiler.CompilationResult;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants;
@@ -187,6 +189,10 @@ public class MethodDeclaration extends AbstractMethodDeclaration {
 	}
 
 	public void parseStatements(Parser parser, CompilationUnitDeclaration unit) {
+		if (ExtensionsConfig.ENABLE) {
+			if (CompilerExtensions.isGeneratedMethod(this)) return;
+		}
+		
 		//fill up the method body with statement
 		parser.parse(this, unit);
 	}
