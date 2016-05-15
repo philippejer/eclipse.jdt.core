@@ -434,7 +434,7 @@ public void computeConversion(Scope scope, TypeBinding runtimeTimeType, TypeBind
  * @param valueRequired boolean
  */
 public void generateCode(BlockScope currentScope, CodeStream codeStream, boolean valueRequired) {
-	if (ExtensionsConfig.ENABLE) {
+	if (ExtensionsConfig.Enable) {
 		if (CompilerExtensions.isMessageSendDisabled(this.binding)) {
 			Expression expression = CompilerExtensions.makeDefaultLiteral(this.resolvedType, this.sourceStart, this.sourceEnd);
 			expression.resolveType(currentScope);
@@ -738,7 +738,7 @@ public TypeBinding resolveType(BlockScope scope) {
 	
 	TypeBinding methodType = findMethodBinding(scope);
 	
-	if (ExtensionsConfig.ENABLE) {
+	if (ExtensionsConfig.Enable) {
 		CompilerExtensions.handleSyntheticArgumentsForMessageSend(this, scope);
 	}
 

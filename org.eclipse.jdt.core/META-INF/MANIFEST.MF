@@ -65,3 +65,6 @@ Require-Bundle: org.eclipse.core.resources;bundle-version="[3.3.0,4.0.0)",
 Bundle-RequiredExecutionEnvironment: JavaSE-1.7
 Eclipse-ExtensibleAPI: true
 Bundle-ActivationPolicy: lazy
+Bundle-ClassPath: lib/objenesis-2.1.jar,
+ lib/cloning.jar,
+ .

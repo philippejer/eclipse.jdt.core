@@ -1401,7 +1401,7 @@ public class CompilerOptions {
 
 		this.complainOnUninternedIdentityComparison = false;
 		
-		if (ExtensionsConfig.ENABLE) {
+		if (ExtensionsConfig.Enable) {
 			this.storeAnnotations = true;
 		}
 	}
@@ -1904,7 +1904,7 @@ public class CompilerOptions {
 				this.complainOnUninternedIdentityComparison = false;
 			}
 		}
-		if (ExtensionsConfig.ENABLE) {
+		if (ExtensionsConfig.Enable) {
 			this.storeAnnotations = true;
 		}
 	}

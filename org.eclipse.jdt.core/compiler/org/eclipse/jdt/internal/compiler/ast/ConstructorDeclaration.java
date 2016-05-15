@@ -521,7 +521,7 @@ public boolean isRecursive(ArrayList visited) {
 }
 
 public void parseStatements(Parser parser, CompilationUnitDeclaration unit) {
-	if (ExtensionsConfig.ENABLE) {
+	if (ExtensionsConfig.Enable) {
 		if (CompilerExtensions.isGeneratedMethod(this)) return;
 	}
 		

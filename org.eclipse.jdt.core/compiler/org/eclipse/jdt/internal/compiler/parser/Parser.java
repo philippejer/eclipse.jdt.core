@@ -3392,7 +3392,7 @@ protected void consumeEnhancedForStatementHeader(){
 		problemReporter().invalidUsageOfForeachStatements(statement.elementVariable, collection);
 	}
 
-	if (ExtensionsConfig.ENABLE) {
+	if (ExtensionsConfig.Enable) {
 		statement.elementVariable.collectionCopy = collection;
 	}
 }
@@ -4068,7 +4068,7 @@ protected void consumeExitVariableWithInitialization() {
 
 	recoveryExitFromVariable();
 
-	if (ExtensionsConfig.ENABLE) {
+	if (ExtensionsConfig.Enable) {
 		variableDecl.initializationCopy = variableDecl.initialization;
 	}
 }
@@ -10019,7 +10019,7 @@ protected CompilationUnitDeclaration endParse(int act) {
 	}
 	this.javadoc = null;
 	
-	if (ExtensionsConfig.ENABLE) {
+	if (ExtensionsConfig.Enable) {
 		CompilerExtensions.handleEndParse(this.compilationUnit);
 	}
 	
