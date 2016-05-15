@@ -473,7 +473,7 @@ public TypeBinding resolveType(BlockScope scope) {
 		this.binding = findConstructorBinding(scope, this, (ReferenceBinding) this.resolvedType, this.argumentTypes);
 	}
 	
-	if (ExtensionsConfig.ENABLE) {
+	if (ExtensionsConfig.Enable) {
 		CompilerExtensions.handleSyntheticArgumentsForAllocation(this, scope);
 	}
 	

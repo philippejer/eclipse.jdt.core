@@ -1055,7 +1055,7 @@ public TypeBinding resolveType(ClassScope scope) {
 
 public TypeBinding resolveTypeExpecting(BlockScope scope, TypeBinding expectedType) {
 	setExpectedType(expectedType); // needed in case of generic method invocation
-	TypeBinding expressionType = ExtensionsConfig.ENABLE ?
+	TypeBinding expressionType = ExtensionsConfig.Enable ?
 			CompilerExtensions.resolveTypeLazy(this, scope) : this.resolveType(scope);
 	if (expressionType == null) return null;
 	if (TypeBinding.equalsEquals(expressionType, expectedType)) return expressionType;

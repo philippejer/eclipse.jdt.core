@@ -196,12 +196,12 @@ public FlowInfo analyseCode(BlockScope currentScope, FlowContext flowContext, Fl
 		return false;
 	}
 	public void resolve(BlockScope scope) {
-		if (ExtensionsConfig.ENABLE) {
+		if (ExtensionsConfig.Enable) {
 			CompilerExtensions.handleVarResolveLocalDeclaration(this, scope);
 		}
 		
 		// create a binding and add it to the scope
-		TypeBinding variableType = ExtensionsConfig.ENABLE ?
+		TypeBinding variableType = ExtensionsConfig.Enable ?
 				CompilerExtensions.resolveTypeLazy(this.type, scope) : this.type.resolveType(scope);
 
 		this.bits |= (this.type.bits & ASTNode.HasTypeAnnotations);
@@ -241,7 +241,7 @@ public FlowInfo analyseCode(BlockScope currentScope, FlowContext flowContext, Fl
 		if (variableType == null) {
 			if (this.initialization != null)
 				 // want to report all possible errors
-				if (ExtensionsConfig.ENABLE)
+				if (ExtensionsConfig.Enable)
 					CompilerExtensions.resolveTypeLazy(this.initialization, scope);
 				else
 					this.initialization.resolveType(scope);
@@ -259,7 +259,7 @@ public FlowInfo analyseCode(BlockScope currentScope, FlowContext flowContext, Fl
 			} else {
 				this.initialization.setExpressionContext(ASSIGNMENT_CONTEXT);
 				this.initialization.setExpectedType(variableType);
-				TypeBinding initializationType = ExtensionsConfig.ENABLE ?
+				TypeBinding initializationType = ExtensionsConfig.Enable ?
 						CompilerExtensions.resolveTypeLazy(this.initialization, scope) : this.initialization.resolveType(scope);
 				if (initializationType != null) {
 					if (TypeBinding.notEquals(variableType, initializationType)) // must call before computeConversion() and typeMismatchError()

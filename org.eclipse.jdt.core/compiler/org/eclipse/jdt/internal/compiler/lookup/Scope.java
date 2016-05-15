@@ -709,7 +709,7 @@ public abstract class Scope {
 	 */
 	protected final MethodBinding computeCompatibleMethod(MethodBinding method, TypeBinding[] arguments, InvocationSite invocationSite, boolean tiebreakingVarargsMethods)
 	{
-		if (ExtensionsConfig.ENABLE) {
+		if (ExtensionsConfig.Enable) {
 			arguments = CompilerExtensions.handleSyntheticParametersForCompatibility(method, arguments);
 		}
 		TypeBinding[] genericTypeArguments = invocationSite.genericTypeArguments();

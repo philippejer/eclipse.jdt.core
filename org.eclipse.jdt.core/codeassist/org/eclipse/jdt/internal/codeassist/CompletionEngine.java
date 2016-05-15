@@ -5262,7 +5262,7 @@ public final class CompletionEngine
 					int paramLength = parameters.length;
 					if (minArgLength > paramLength)
 						continue next;
-					if (ExtensionsConfig.ENABLE && !forAnonymousType) {
+					if (ExtensionsConfig.Enable && !forAnonymousType) {
 						TypeBinding[] newArgTypes = CompilerExtensions.handleSyntheticParametersForCompatibility(constructor, argTypes);
 						int argLength = newArgTypes.length;						
 						for (int a = argLength; --a >= 0;)
@@ -5287,7 +5287,7 @@ public final class CompletionEngine
 					}
 					char[][] parameterNames = findMethodParameterNames(constructor,parameterTypeNames);
 			
-					if (ExtensionsConfig.ENABLE && !forAnonymousType) {
+					if (ExtensionsConfig.Enable && !forAnonymousType) {
 						CompilerExtensions.initSyntheticParameterAnnotations(constructor);
 						int numSyntheticAnnotations = constructor.numSyntheticAnnotations;
 						if (numSyntheticAnnotations > 0) {
@@ -5534,7 +5534,7 @@ public final class CompletionEngine
 								if(DEBUG) {
 									this.printDebug(proposal);
 								}
-								if (ExtensionsConfig.ENABLE) {
+								if (ExtensionsConfig.Enable) {
 									proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(constructor, proposal.getSignature()));
 								}
 							}
@@ -5579,7 +5579,7 @@ public final class CompletionEngine
 								if(DEBUG) {
 									this.printDebug(proposal);
 								}
-								if (ExtensionsConfig.ENABLE) {
+								if (ExtensionsConfig.Enable) {
 									proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(constructor, proposal.getSignature()));
 								}
 							}
@@ -5612,7 +5612,7 @@ public final class CompletionEngine
 								if(DEBUG) {
 									this.printDebug(proposal);
 								}
-								if (ExtensionsConfig.ENABLE) {
+								if (ExtensionsConfig.Enable) {
 									proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(constructor, proposal.getSignature()));
 								}
 							}
@@ -8602,7 +8602,7 @@ public final class CompletionEngine
 			if (minArgLength > method.parameters.length)
 				continue next;
 
-			if (ExtensionsConfig.ENABLE) {
+			if (ExtensionsConfig.Enable) {
 				TypeBinding[] newArgTypes = CompilerExtensions.handleSyntheticParametersForCompatibility(method, argTypes);
 				int argLength = newArgTypes.length;
 				for (int a = argLength; --a >= 0;){
@@ -8675,7 +8675,7 @@ public final class CompletionEngine
 				}
 			char[][] parameterNames = findMethodParameterNames(method,parameterTypeNames);
 			
-			if (ExtensionsConfig.ENABLE) {
+			if (ExtensionsConfig.Enable) {
 				CompilerExtensions.initSyntheticParameterAnnotations(method);
 				int numSyntheticAnnotations = method.numSyntheticAnnotations;
 				if (numSyntheticAnnotations > 0) {
@@ -8838,7 +8838,7 @@ public final class CompletionEngine
 					if(DEBUG) {
 						this.printDebug(proposal);
 					}
-					if (ExtensionsConfig.ENABLE) {
+					if (ExtensionsConfig.Enable) {
 						proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(method, proposal.getSignature()));
 					}
 				}
@@ -8872,7 +8872,7 @@ public final class CompletionEngine
 					if(DEBUG) {
 						this.printDebug(proposal);
 					}
-					if (ExtensionsConfig.ENABLE) {
+					if (ExtensionsConfig.Enable) {
 						proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(method, proposal.getSignature()));
 					}
 				}
@@ -8917,7 +8917,7 @@ public final class CompletionEngine
 					if(DEBUG) {
 						this.printDebug(proposal);
 					}
-					if (ExtensionsConfig.ENABLE) {
+					if (ExtensionsConfig.Enable) {
 						proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(method, proposal.getSignature()));
 					}
 				}

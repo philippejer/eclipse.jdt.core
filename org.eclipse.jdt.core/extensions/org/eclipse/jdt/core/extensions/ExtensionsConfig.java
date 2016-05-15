@@ -5,19 +5,19 @@ package org.eclipse.jdt.core.extensions;
  */
 public class ExtensionsConfig {
 	// Enables the extensions (and allows to easily find all the hooks in the JDT code)
-	public static final boolean ENABLE = true;
+	public static final boolean Enable = true;
 	
 	// Direct logging of some debug messages to the error stream (not proper Eclipse logging)
-	public static final boolean ENABLE_LOGS = false;
+	public static final boolean EnableLogs = false;
 
 	public static void log(String message) {
-		if (!ENABLE_LOGS) return;
+		if (!EnableLogs) return;
 		System.err.println(message);
 		System.err.flush();
 	}
 
 	public static String asLog(Object object) {
-		if (!ENABLE_LOGS) return null;
+		if (!EnableLogs) return null;
 		String objString = object.toString();
 		if (objString.length() > 200)
 			objString = objString.substring(0, 200);

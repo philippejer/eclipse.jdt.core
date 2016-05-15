@@ -430,7 +430,7 @@ public class ExplicitConstructorCall extends Statement implements Invocation {
 			}
 			this.binding = findConstructorBinding(scope, this, receiverType, argumentTypes);
 	
-			if (ExtensionsConfig.ENABLE) {
+			if (ExtensionsConfig.Enable) {
 				argumentTypes = CompilerExtensions.handleSyntheticArgumentsForConstructorCall(this, scope, argumentTypes);		
 			}
 

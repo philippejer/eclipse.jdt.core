@@ -1241,7 +1241,7 @@ public MethodBinding[] getMethods(char[] selector) {
 // Answer methods named selector, which take no more than the suggestedParameterLength.
 // The suggested parameter length is optional and may not be guaranteed by every type.
 public MethodBinding[] getMethods(char[] selector, int suggestedParameterLength) {
-	if (ExtensionsConfig.ENABLE) {
+	if (ExtensionsConfig.Enable) {
 		return this.getMethods(selector);
 	}
 	

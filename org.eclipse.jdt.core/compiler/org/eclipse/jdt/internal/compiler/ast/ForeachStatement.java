@@ -417,7 +417,7 @@ public class ForeachStatement extends Statement {
 	}
 
 	public void resolve(BlockScope upperScope) {
-		if (ExtensionsConfig.ENABLE) {
+		if (ExtensionsConfig.Enable) {
 			CompilerExtensions.handleVarResolveForEach(this, upperScope);
 		}
 		
@@ -425,7 +425,7 @@ public class ForeachStatement extends Statement {
 		this.scope = new BlockScope(upperScope);
 		this.elementVariable.resolve(this.scope); // collection expression can see itemVariable
 		TypeBinding elementType = this.elementVariable.type.resolvedType;
-		TypeBinding collectionType = this.collection == null ? null : ExtensionsConfig.ENABLE ?
+		TypeBinding collectionType = this.collection == null ? null : ExtensionsConfig.Enable ?
 				CompilerExtensions.resolveTypeLazy(this.collection, upperScope) : this.collection.resolveType(upperScope);
 
 		TypeBinding expectedCollectionType = null;
