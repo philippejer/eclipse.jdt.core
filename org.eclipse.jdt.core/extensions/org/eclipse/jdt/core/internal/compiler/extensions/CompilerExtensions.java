@@ -11,7 +11,10 @@ import org.eclipse.jdt.internal.compiler.CompilationResult;
 import org.eclipse.jdt.internal.compiler.ast.ASTNode;
 import org.eclipse.jdt.internal.compiler.ast.AbstractMethodDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.AllocationExpression;
+import org.eclipse.jdt.internal.compiler.ast.Annotation;
 import org.eclipse.jdt.internal.compiler.ast.Argument;
+import org.eclipse.jdt.internal.compiler.ast.ArrayAllocationExpression;
+import org.eclipse.jdt.internal.compiler.ast.ArrayInitializer;
 import org.eclipse.jdt.internal.compiler.ast.ArrayQualifiedTypeReference;
 import org.eclipse.jdt.internal.compiler.ast.ArrayTypeReference;
 import org.eclipse.jdt.internal.compiler.ast.CompilationUnitDeclaration;
@@ -43,6 +46,7 @@ import org.eclipse.jdt.internal.compiler.ast.Wildcard;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants;
 import org.eclipse.jdt.internal.compiler.impl.BooleanConstant;
 import org.eclipse.jdt.internal.compiler.impl.IntConstant;
+import org.eclipse.jdt.internal.compiler.impl.ReferenceContext;
 import org.eclipse.jdt.internal.compiler.impl.StringConstant;
 import org.eclipse.jdt.internal.compiler.lookup.AnnotationBinding;
 import org.eclipse.jdt.internal.compiler.lookup.ArrayBinding;
@@ -60,6 +64,8 @@ import org.eclipse.jdt.internal.compiler.lookup.TypeBinding;
 import org.eclipse.jdt.internal.compiler.lookup.TypeConstants;
 import org.eclipse.jdt.internal.compiler.lookup.TypeIds;
 import org.eclipse.jdt.internal.compiler.lookup.WildcardBinding;
+import org.eclipse.jdt.internal.compiler.problem.DefaultProblem;
+import org.eclipse.jdt.internal.compiler.problem.ProblemSeverities;
 import org.eclipse.jdt.internal.compiler.util.Util;
 
 import com.rits.cloning.Cloner;
@@ -80,202 +86,41 @@ public class CompilerExtensions {
 		// check that only stuff directly derived by the parser is cloned
 		cloner.setDumpClonedClasses(false);
 	}
+	
+	public static void addProblem(Scope scope, int sourceStart, int sourceEnd, String message, boolean isError) {
+		ReferenceContext referenceContext = scope.referenceContext();
+		CompilationResult result = referenceContext.compilationResult();
+		int[] lineSeparators = result.getLineSeparatorPositions();
+		int lineNumber = Util.getLineNumber(sourceStart, lineSeparators, 0, lineSeparators.length - 1);
+		int columnNumber = Util.searchColumnNumber(lineSeparators, lineNumber, sourceStart);
+		int severity = isError ? ProblemSeverities.Error : ProblemSeverities.Warning;
+		DefaultProblem problem = new DefaultProblem(
+				result.fileName, message, 0, new String[0], severity, sourceStart, sourceEnd, lineNumber, columnNumber);
+		result.record(problem, referenceContext);
+	}
 
 	public static long[] copy(long[] array) {
 		return array == null ? null : array.clone();
 	}
 	
-	public static long pos(int startPos, int endPos) {
-		return ((long) startPos << 32) | (endPos & 0xFFFFFFFFL);
+	public static long pos(int sourceStart, int sourceEnd) {
+		return ((long) sourceStart << 32) | (sourceEnd & 0xFFFFFFFFL);
 	}
 	
 	public static long pos(ASTNode node) {
 		return pos(node.sourceStart, node.sourceEnd);
 	}
 	
-	public static long[] poss(ASTNode node, int repeat) {
-		long p = pos(node);
+	public static long[] poss(int sourceStart, int sourceEnd, int repeat) {
+		long p = pos(sourceStart, sourceEnd);
 		long[] out = new long[repeat];
 		Arrays.fill(out, p);
 		return out;
 	}
 	
-//	public static Annotation copyAnnotation(Annotation annotation, ASTNode source) {
-//		int pS = source.sourceStart, pE = source.sourceEnd;
-//		
-//		if (annotation instanceof MarkerAnnotation) {
-//			MarkerAnnotation ann = new MarkerAnnotation(copyType(annotation.type, source), pS);
-//			ann.declarationSourceEnd = ann.sourceEnd = ann.statementEnd = pE;
-//			return ann;
-//		}
-//		
-//		if (annotation instanceof SingleMemberAnnotation) {
-//			SingleMemberAnnotation ann = new SingleMemberAnnotation(copyType(annotation.type, source), pS);
-//			ann.declarationSourceEnd = ann.sourceEnd = ann.statementEnd = pE;
-//			//TODO memberValue(s) need to be copied as well (same for copying a NormalAnnotation as below).
-//			ann.memberValue = ((SingleMemberAnnotation)annotation).memberValue;
-//			return ann;
-//		}
-//		
-//		if (annotation instanceof NormalAnnotation) {
-//			NormalAnnotation ann = new NormalAnnotation(copyType(annotation.type, source), pS);
-//			ann.declarationSourceEnd = ann.statementEnd = ann.sourceEnd = pE;
-//			ann.memberValuePairs = ((NormalAnnotation)annotation).memberValuePairs;
-//			return ann;
-//		}
-//		
-//		return annotation;
-//	}
-//	
-//	public static Annotation[] copyAnnotations(ASTNode source, Annotation[]... allAnnotations) {
-//		List<Annotation> result = null;
-//		for (Annotation[] annotations : allAnnotations) {
-//			if (annotations != null) {
-//				for (Annotation annotation : annotations) {
-//					if (result == null) result = new ArrayList<Annotation>();
-//					result.add(copyAnnotation(annotation, source));
-//				}
-//			}
-//		}
-//		
-//		return result == null ? null : result.toArray(new Annotation[0]);
-//	}
-//	
-//	public static TypeParameter[] copyTypeParams(TypeParameter[] params, ASTNode source) {
-//		if (params == null) return null;
-//		TypeParameter[] out = new TypeParameter[params.length];
-//		int idx = 0;
-//		for (TypeParameter param : params) {
-//			TypeParameter o = new TypeParameter();
-//			o.annotations = param.annotations;
-//			o.bits = param.bits;
-//			o.modifiers = param.modifiers;
-//			o.name = param.name;
-//			o.type = copyType(param.type, source);
-//			o.sourceStart = param.sourceStart;
-//			o.sourceEnd = param.sourceEnd;
-//			o.declarationEnd = param.declarationEnd;
-//			o.declarationSourceStart = param.declarationSourceStart;
-//			o.declarationSourceEnd = param.declarationSourceEnd;
-//			if (param.bounds != null) {
-//				TypeReference[] b = new TypeReference[param.bounds.length];
-//				int idx2 = 0;
-//				for (TypeReference ref : param.bounds) b[idx2++] = copyType(ref, source);
-//				o.bounds = b;
-//			}
-//			out[idx++] = o;
-//		}
-//		return out;
-//	}
-//	
-//	public static TypeReference namePlusTypeParamsToTypeReference(char[] typeName, TypeParameter[] params, long p) {
-//		if (params != null && params.length > 0) {
-//			TypeReference[] refs = new TypeReference[params.length];
-//			int idx = 0;
-//			for (TypeParameter param : params) {
-//				TypeReference typeRef = new SingleTypeReference(param.name, p);
-//				refs[idx++] = typeRef;
-//			}
-//			return new ParameterizedSingleTypeReference(typeName, refs, 0, p);
-//		}
-//		
-//		return new SingleTypeReference(typeName, p);
-//	}
-//	
-//	public static TypeReference[] copyTypes(TypeReference[] refs) {
-//		return copyTypes(refs, null);
-//	}
-//	
-//	public static TypeReference[] copyTypes(TypeReference[] refs, ASTNode source) {
-//		if (refs == null) return null;
-//		TypeReference[] outs = new TypeReference[refs.length];
-//		int idx = 0;
-//		for (TypeReference ref : refs) {
-//			outs[idx++] = copyType(ref, source);
-//		}
-//		return outs;
-//	}
-//	
-//	public static TypeReference copyType(TypeReference ref) {
-//		return copyType(ref, null);
-//	}
-//	
-//	public static TypeReference copyType(TypeReference ref, ASTNode source) {
-//		if (ref instanceof ParameterizedQualifiedTypeReference) {
-//			ParameterizedQualifiedTypeReference iRef = (ParameterizedQualifiedTypeReference) ref;
-//			TypeReference[][] args = null;
-//			if (iRef.typeArguments != null) {
-//				args = new TypeReference[iRef.typeArguments.length][];
-//				int idx = 0;
-//				for (TypeReference[] inRefArray : iRef.typeArguments) {
-//					if (inRefArray == null) args[idx++] = null;
-//					else {
-//						TypeReference[] outRefArray = new TypeReference[inRefArray.length];
-//						int idx2 = 0;
-//						for (TypeReference inRef : inRefArray) {
-//							outRefArray[idx2++] = copyType(inRef, source);
-//						}
-//						args[idx++] = outRefArray;
-//					}
-//				}
-//			}
-//			
-//			TypeReference typeRef = new ParameterizedQualifiedTypeReference(iRef.tokens, args, iRef.dimensions(), copy(iRef.sourcePositions));
-//			return typeRef;
-//		}
-//		
-//		if (ref instanceof ArrayQualifiedTypeReference) {
-//			ArrayQualifiedTypeReference iRef = (ArrayQualifiedTypeReference) ref;
-//			TypeReference typeRef = new ArrayQualifiedTypeReference(iRef.tokens, iRef.dimensions(), copy(iRef.sourcePositions));
-//			return typeRef;
-//		}
-//		
-//		if (ref instanceof QualifiedTypeReference) {
-//			QualifiedTypeReference iRef = (QualifiedTypeReference) ref;
-//			TypeReference typeRef = new QualifiedTypeReference(iRef.tokens, copy(iRef.sourcePositions));
-//			return typeRef;
-//		}
-//		
-//		if (ref instanceof ParameterizedSingleTypeReference) {
-//			ParameterizedSingleTypeReference iRef = (ParameterizedSingleTypeReference) ref;
-//			TypeReference[] args = null;
-//			if (iRef.typeArguments != null) {
-//				args = new TypeReference[iRef.typeArguments.length];
-//				int idx = 0;
-//				for (TypeReference inRef : iRef.typeArguments) {
-//					if (inRef == null) args[idx++] = null;
-//					else args[idx++] = copyType(inRef, source);
-//				}
-//			}
-//			
-//			TypeReference typeRef = new ParameterizedSingleTypeReference(iRef.token, args, iRef.dimensions(), (long)iRef.sourceStart << 32 | iRef.sourceEnd);
-//			return typeRef;
-//		}
-//		
-//		if (ref instanceof ArrayTypeReference) {
-//			ArrayTypeReference iRef = (ArrayTypeReference) ref;
-//			TypeReference typeRef = new ArrayTypeReference(iRef.token, iRef.dimensions(), (long)iRef.sourceStart << 32 | iRef.sourceEnd);
-//			return typeRef;
-//		}
-//		
-//		if (ref instanceof Wildcard) {
-//			Wildcard original = (Wildcard)ref;
-//			
-//			Wildcard wildcard = new Wildcard(original.kind);
-//			wildcard.sourceStart = original.sourceStart;
-//			wildcard.sourceEnd = original.sourceEnd;
-//			if (original.bound != null) wildcard.bound = copyType(original.bound, source);
-//			return wildcard;
-//		}
-//		
-//		if (ref instanceof SingleTypeReference) {
-//			SingleTypeReference iRef = (SingleTypeReference) ref;
-//			TypeReference typeRef = new SingleTypeReference(iRef.token, (long)iRef.sourceStart << 32 | iRef.sourceEnd);
-//			return typeRef;
-//		}
-//		
-//		return ref;
-//	}
+	public static long[] poss(ASTNode node, int repeat) {
+		return poss(node.sourceStart, node.sourceEnd, repeat);
+	}
 	
 	public static TypeReference makeType(TypeBinding binding, ASTNode pos, boolean allowCompound) {
 		int dims = binding.dimensions();
@@ -516,15 +361,14 @@ public class CompilerExtensions {
 		return matches(((SingleTypeReference) ref).token, name);
 	}
 	
-	public static final char[] VarName = {'v', 'a', 'r'};
-	public static final char[] VoidName = {'v', 'o', 'i', 'd'};
+	public static final char[] VAR_NAME = {'v', 'a', 'r'};
 
 	public static boolean isVar(TypeReference ref) {
-		return isSingleTypeReference(ref, VarName);
+		return isSingleTypeReference(ref, VAR_NAME);
 	}
 
 	public static boolean isVoid(TypeReference ref) {
-		return isSingleTypeReference(ref, VoidName);
+		return isSingleTypeReference(ref, TypeConstants.VOID);
 	}
 	
 	public static TypeBinding resolveTypeLazy(Expression expression, BlockScope scope) {
@@ -628,23 +472,23 @@ public class CompilerExtensions {
 	}
 	
 	public static void handleDefaultArgumentsMethod(MethodDeclaration copy, int argumentIndex) {
-		int startPos = copy.bodyStart, endPos = copy.bodyEnd;
+		int sourceStart = copy.bodyStart, sourceEnd = copy.bodyEnd;
 		copy.bits |= GeneratedBit;
 		MessageSend invocation = new MessageSend();
-		invocation.sourceStart = startPos;
-		invocation.sourceEnd = endPos;
-		invocation.statementEnd = endPos;
+		invocation.sourceStart = sourceStart;
+		invocation.sourceEnd = sourceEnd;
+		invocation.statementEnd = sourceEnd;
 		invocation.receiver = ThisReference.implicitThis();
-		invocation.receiver.sourceStart = startPos;
-		invocation.receiver.sourceEnd = endPos;	
-		invocation.receiver.statementEnd = endPos;
-		invocation.nameSourcePosition = pos(startPos, endPos);
+		invocation.receiver.sourceStart = sourceStart;
+		invocation.receiver.sourceEnd = sourceEnd;	
+		invocation.receiver.statementEnd = sourceEnd;
+		invocation.nameSourcePosition = pos(sourceStart, sourceEnd);
 		invocation.selector = copy.selector;
 		invocation.arguments = new Expression[copy.arguments.length];
 		for (int i = 0; i < invocation.arguments.length; i++) {
 			Argument argument = copy.arguments[i];
 			if (i < argumentIndex) {
-				invocation.arguments[i] = new SingleNameReference(argument.name, pos(startPos, endPos));
+				invocation.arguments[i] = new SingleNameReference(argument.name, pos(sourceStart, sourceEnd));
 			} else {
 				invocation.arguments[i] = argument.defaultExpression;
 			}
@@ -656,7 +500,7 @@ public class CompilerExtensions {
 		}		
 		copy.statements = new Statement[1];
 		if (!isVoid(copy.returnType)) {
-			copy.statements[0] = new ReturnStatement(invocation, startPos, endPos);
+			copy.statements[0] = new ReturnStatement(invocation, sourceStart, sourceEnd);
 		}
 		copy.statements[0] = invocation;
 	}
@@ -673,16 +517,16 @@ public class CompilerExtensions {
 	}
 	
 	public static void handleDefaultArgumentsConstructor(ConstructorDeclaration copy, int argumentIndex) {
-		int startPos = copy.bodyStart, endPos = copy.bodyEnd;	
+		int sourceStart = copy.bodyStart, sourceEnd = copy.bodyEnd;	
 		copy.bits |= GeneratedBit;	
 		ExplicitConstructorCall invocation = new ExplicitConstructorCall(ExplicitConstructorCall.This);
-		invocation.sourceStart = startPos;
-		invocation.sourceEnd = endPos;
+		invocation.sourceStart = sourceStart;
+		invocation.sourceEnd = sourceEnd;
 		invocation.arguments = new Expression[copy.arguments.length];
 		for (int i = 0; i < invocation.arguments.length; i++) {
 			Argument argument = copy.arguments[i];
 			if (i < argumentIndex) {
-				invocation.arguments[i] = new SingleNameReference(argument.name, pos(startPos, endPos));
+				invocation.arguments[i] = new SingleNameReference(argument.name, pos(sourceStart, sourceEnd));
 			} else {
 				invocation.arguments[i] = argument.defaultExpression;
 			}
@@ -777,47 +621,53 @@ public class CompilerExtensions {
 		return new String(chars);
 	}
 	
-	public static final char[][] ExtensionsPackageName = asChars("org", "eclipse", "jdt", "annotation", "extensions"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
-	public static final char[][] CallIfAnnotationName = buildName(ExtensionsPackageName, asChars("CallIf")); //$NON-NLS-1$
-	public static final char[][] CallFileAnnotationName = buildName(ExtensionsPackageName, asChars("CallFile")); //$NON-NLS-1$
-	public static final char[][] CallLineAnnotationName = buildName(ExtensionsPackageName, asChars("CallLine")); //$NON-NLS-1$
-	public static final char[][] CallClassAnnotationName = buildName(ExtensionsPackageName, asChars("CallClass")); //$NON-NLS-1$
-	public static final char[][] CallMethodAnnotationName = buildName(ExtensionsPackageName, asChars("CallMethod")); //$NON-NLS-1$
-	public static final char[][] CallArgAnnotationName = buildName(ExtensionsPackageName, asChars("CallArg")); //$NON-NLS-1$	
-	public static final char[][][] SyntheticAnnotationNames = {CallFileAnnotationName, CallLineAnnotationName, CallClassAnnotationName, CallMethodAnnotationName, CallArgAnnotationName };	
-	public static final char[] ValueAnnotationParamName = asChars("value"); //$NON-NLS-1$
+	public static final char[][] EXTENSIONS_NAME = asChars("org", "eclipse", "jdt", "annotation", "extensions"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
+	public static final char[][] CALL_IF_NAME = buildName(EXTENSIONS_NAME, asChars("CallIf")); //$NON-NLS-1$
+	public static final char[][] CALL_FILE_NAME = buildName(EXTENSIONS_NAME, asChars("CallFile")); //$NON-NLS-1$
+	public static final char[][] CALL_LINE_NAME = buildName(EXTENSIONS_NAME, asChars("CallLine")); //$NON-NLS-1$
+	public static final char[][] CALL_CLASS_NAME = buildName(EXTENSIONS_NAME, asChars("CallClass")); //$NON-NLS-1$
+	public static final char[][] CALL_METHOD_NAME = buildName(EXTENSIONS_NAME, asChars("CallMethod")); //$NON-NLS-1$
+	public static final char[][] CALL_ARG_NAME = buildName(EXTENSIONS_NAME, asChars("CallArg")); //$NON-NLS-1$
+	public static final char[][] CALL_ARGS_NAME = buildName(EXTENSIONS_NAME, asChars("CallArgs")); //$NON-NLS-1$		
+	public static final char[][][] SYNTHETIC_NAMES = {CALL_FILE_NAME, CALL_LINE_NAME, CALL_CLASS_NAME, CALL_METHOD_NAME,
+			CALL_ARG_NAME, CALL_ARGS_NAME };	
+	public static final char[] VALUE_NAME = asChars("value"); //$NON-NLS-1$
 	
 	public static boolean isSyntheticParameterAnnotation(AnnotationBinding annotation) {
 		ReferenceBinding type = annotation.getAnnotationType();
-		for (int i = 0; i < SyntheticAnnotationNames.length; i++) {
-			if (matches(SyntheticAnnotationNames[i], type.compoundName))
+		for (int i = 0; i < SYNTHETIC_NAMES.length; i++) {
+			if (matches(SYNTHETIC_NAMES[i], type.compoundName))
 				return true;
 		}
 		return false;
 	}
 	
 	public static boolean isCallIfAnnotation(AnnotationBinding annotation) {
-		return matches(CallIfAnnotationName, annotation.getAnnotationType().compoundName);
+		return matches(CALL_IF_NAME, annotation.getAnnotationType().compoundName);
 	}
 	
 	public static boolean isCallFileAnnotation(AnnotationBinding annotation) {
-		return matches(CallFileAnnotationName, annotation.getAnnotationType().compoundName);
+		return matches(CALL_FILE_NAME, annotation.getAnnotationType().compoundName);
 	}
 	
 	public static boolean isCallLineAnnotation(AnnotationBinding annotation) {
-		return matches(CallLineAnnotationName, annotation.getAnnotationType().compoundName);
+		return matches(CALL_LINE_NAME, annotation.getAnnotationType().compoundName);
 	}
 	
 	public static boolean isCallClassAnnotation(AnnotationBinding annotation) {
-		return matches(CallClassAnnotationName, annotation.getAnnotationType().compoundName);
+		return matches(CALL_CLASS_NAME, annotation.getAnnotationType().compoundName);
 	}
 	
 	public static boolean isCallMethodAnnotation(AnnotationBinding annotation) {
-		return matches(CallMethodAnnotationName, annotation.getAnnotationType().compoundName);
+		return matches(CALL_METHOD_NAME, annotation.getAnnotationType().compoundName);
 	}
 	
 	public static boolean isCallArgAnnotation(AnnotationBinding annotation) {
-		return matches(CallArgAnnotationName, annotation.getAnnotationType().compoundName);
+		return matches(CALL_ARG_NAME, annotation.getAnnotationType().compoundName);
+	}
+	
+	public static boolean isCallArgsAnnotation(AnnotationBinding annotation) {
+		return matches(CALL_ARGS_NAME, annotation.getAnnotationType().compoundName);
 	}
 	
 	public static char[] extractChars(char[] source, int start, int end) {
@@ -960,11 +810,38 @@ public class CompilerExtensions {
 		if (classScope == null) return new NullLiteral(position, position);
 		CompilationUnitDeclaration compilationUnit = classScope.referenceCompilationUnit();
 		if (compilationUnit == null) return new NullLiteral(position, position);
-		if ((index < 0) || (index >= invocation.arguments().length)) return new NullLiteral(position, position);
-		Expression argument = invocation.arguments()[index];
+		Expression[] arguments = invocation.arguments();
+		if (arguments == null) return new NullLiteral(position, position);
+		if ((index < 0) || (index >= arguments.length)) return new NullLiteral(position, position);
+		Expression argument = arguments[index];
 		char[] contents = compilationUnit.compilationResult().compilationUnit.getContents();
 		char[] argumentChars = extractChars(contents, argument.sourceStart, argument.sourceEnd);
 		return new StringLiteral(argumentChars, position, position, 0);		
+	}
+	
+	public static Expression makeCallArgsExpression(Invocation invocation, Scope scope) {
+		int position = invocation.sourceEnd();
+		ClassScope classScope = scope.classScope();
+		if (classScope == null) return new NullLiteral(position, position);
+		CompilationUnitDeclaration compilationUnit = classScope.referenceCompilationUnit();
+		if (compilationUnit == null) return new NullLiteral(position, position);
+		Expression[] arguments = invocation.arguments();
+		ArrayAllocationExpression result = new ArrayAllocationExpression();
+		result.type = new QualifiedTypeReference(TypeConstants.JAVA_LANG_STRING, poss(position, position, 3));
+		result.dimensions = new Expression[1];
+		result.initializer = new ArrayInitializer();
+		if (arguments == null) {
+			result.initializer.expressions = new Expression[0];
+		} else {
+			result.initializer.expressions = new Expression[arguments.length];
+			for (int i = 0; i < arguments.length; i++) {
+				Expression argument = arguments[i];
+				char[] contents = compilationUnit.compilationResult().compilationUnit.getContents();
+				char[] argumentChars = extractChars(contents, argument.sourceStart, argument.sourceEnd);
+				result.initializer.expressions[i] = new StringLiteral(argumentChars, position, position, 0);		
+			}
+		}
+		return result;
 	}
 	
 	public static Object getAnnotationParam(AnnotationBinding annotation, char[] name) {		
@@ -1038,7 +915,7 @@ public class CompilerExtensions {
 				newArguments[i] = oldArguments[j];
 				newArgumentTypes[i] = oldArgumentTypes[j++];
 			} else {
-				AnnotationBinding annotation = syntheticAnnotations[i];
+ 				AnnotationBinding annotation = syntheticAnnotations[i];
 				if (isCallFileAnnotation(annotation)) {
 					newArguments[i] = makeCallFile(invocation, scope);
 				} else if (isCallLineAnnotation(annotation)) {
@@ -1050,6 +927,8 @@ public class CompilerExtensions {
 				} else if (isCallArgAnnotation(annotation)) {
 					int index = j;
 					newArguments[i] = makeCallArgExpression(invocation, scope, index);
+				} else if (isCallArgsAnnotation(annotation)) {
+					newArguments[i] = makeCallArgsExpression(invocation, scope);
 				} else {
 					newArguments[i] = makeDefaultLiteral(method.parameters[i], invocation.sourceEnd(), invocation.sourceEnd());
 				}
@@ -1089,12 +968,48 @@ public class CompilerExtensions {
 		return invocationArguments.argumentTypes;
 	}
 	
+	public static void checkSyntheticAnnotations(AbstractMethodDeclaration declaration, Scope scope) {
+		if (declaration.arguments == null) return;
+		for (int i = 0; i < declaration.arguments.length; i++) {
+			Argument argument = declaration.arguments[i];
+			if ((argument.annotations == null) || (argument.type == null)) continue;
+			TypeBinding argumentType = argument.type.resolvedType;
+			if (argumentType == null) continue;
+			for (int j = 0; j < argument.annotations.length; j++) {
+				Annotation annotation = argument.annotations[j];
+				AnnotationBinding annotationType = annotation.getCompilerAnnotation();
+				if (annotationType == null) continue;
+				if (isCallFileAnnotation(annotationType) || isCallClassAnnotation(annotationType) || isCallMethodAnnotation(annotationType)
+						|| isCallArgAnnotation(annotationType)) {
+					TypeBinding stringBinding = scope.getJavaLangString();
+					if (!stringBinding.isCompatibleWith(argumentType)) {
+						addProblem(scope, argument.type.sourceStart, argument.type.sourceEnd,
+								"String expected", true); //$NON-NLS-1$
+					}
+				} else if (isCallLineAnnotation(annotationType)) {
+					TypeBinding intBinding = TypeBinding.INT;
+					if (!intBinding.isCompatibleWith(argumentType)) {
+						addProblem(scope, argument.type.sourceStart, argument.type.sourceEnd,
+								"int expected", true); //$NON-NLS-1$
+					}
+				} else if (isCallArgsAnnotation(annotationType)) {
+					TypeBinding stringBinding = scope.getJavaLangString();
+					TypeBinding arrayBinding = scope.createArrayType(stringBinding, 1);
+					if (!arrayBinding.isCompatibleWith(argumentType)) {
+						addProblem(scope, argument.type.sourceStart, argument.type.sourceEnd,
+								"String[] expected", true); //$NON-NLS-1$
+					}
+				}
+			}
+		}
+	}
+	
 	public static boolean isMessageSendDisabled(MethodBinding method) {
 		AnnotationBinding[] annotations = method.getAnnotations();
 		if (annotations == null) return false;
 		for (AnnotationBinding annotation: annotations) {
 			if (isCallIfAnnotation(annotation)) {
-				boolean enabled = getBooleanAnnotationParam(annotation, ValueAnnotationParamName);
+				boolean enabled = getBooleanAnnotationParam(annotation, VALUE_NAME);
 				return !enabled;
 			}
 		}
