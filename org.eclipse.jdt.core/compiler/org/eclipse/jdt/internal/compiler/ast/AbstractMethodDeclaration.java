@@ -30,6 +30,8 @@ package org.eclipse.jdt.internal.compiler.ast;
 import java.util.List;
 
 import org.eclipse.jdt.core.compiler.*;
+import org.eclipse.jdt.core.extensions.ExtensionsConfig;
+import org.eclipse.jdt.core.internal.compiler.extensions.CompilerExtensions;
 import org.eclipse.jdt.internal.compiler.*;
 import org.eclipse.jdt.internal.compiler.ast.TypeReference.AnnotationPosition;
 import org.eclipse.jdt.internal.compiler.flow.FlowInfo;
@@ -552,6 +554,10 @@ public abstract class AbstractMethodDeclaration
 		} catch (AbortMethod e) {
 			// ========= abort on fatal error =============
 			this.ignoreFurtherInvestigation = true;
+		}
+		
+		if (ExtensionsConfig.Enable) {
+			CompilerExtensions.checkSyntheticAnnotations(this, scope);
 		}
 	}
 
