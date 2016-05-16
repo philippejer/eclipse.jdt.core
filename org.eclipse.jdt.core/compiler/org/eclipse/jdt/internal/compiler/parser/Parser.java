@@ -10020,7 +10020,7 @@ protected CompilationUnitDeclaration endParse(int act) {
 	this.javadoc = null;
 	
 	if (ExtensionsConfig.Enable) {
-		CompilerExtensions.handleEndParse(this.compilationUnit);
+		CompilerExtensions.handleEndParse(this.compilationUnit, this.options);
 	}
 	
 	return this.compilationUnit;

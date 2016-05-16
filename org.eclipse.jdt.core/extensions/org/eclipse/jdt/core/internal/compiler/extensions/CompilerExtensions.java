@@ -45,6 +45,7 @@ import org.eclipse.jdt.internal.compiler.ast.TypeReference;
 import org.eclipse.jdt.internal.compiler.ast.Wildcard;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants;
 import org.eclipse.jdt.internal.compiler.impl.BooleanConstant;
+import org.eclipse.jdt.internal.compiler.impl.CompilerOptions;
 import org.eclipse.jdt.internal.compiler.impl.IntConstant;
 import org.eclipse.jdt.internal.compiler.impl.ReferenceContext;
 import org.eclipse.jdt.internal.compiler.impl.StringConstant;
@@ -376,10 +377,10 @@ public class CompilerExtensions {
 		try {
 			return expression.resolveType(scope);
 		} catch (NullPointerException e) {
-			// may happen if the expression contains an unresolved "var" types
+			// may happen if the expression contains an unresolved var reference
 			return null;
 		} catch (ArrayIndexOutOfBoundsException e) {
-			// may happen if the expression contains an unresolved "var" types
+			// may happen if the expression contains an unresolved var reference
 			return null;
 		}
 	}
@@ -401,8 +402,7 @@ public class CompilerExtensions {
 				TypeReference type = makeType(binding, declaration.type, false);		
 				declaration.type = type;
 			} catch (NullPointerException e) {
-				// may happen if the parser tries to resolve the declaration before parsing the expression
-				// (e.g. hovering the mouse over "var")
+				// may happen with the selection parser (initialization not parsed)
 				ExtensionsConfig.log("Cannot resolve initialization"); //$NON-NLS-1$
 				if (ExtensionsConfig.EnableLogs) e.printStackTrace();
 				TypeReference newType = new QualifiedTypeReference(TypeConstants.JAVA_LANG_OBJECT, poss(declaration.type, 3));	
@@ -420,8 +420,7 @@ public class CompilerExtensions {
 				TypeReference type = makeType(binding, statement.elementVariable.type, false);
 				statement.elementVariable.type = type;
 			} catch (NullPointerException e) {
-				// may happen if the parser tries to resolve the declaration before parsing the expression
-				// (e.g. hovering the mouse over "var")
+				// may happen with the selection parser (initialization not parsed)
 				ExtensionsConfig.log("Cannot resolve collection"); //$NON-NLS-1$
 				TypeReference newType = new QualifiedTypeReference(TypeConstants.JAVA_LANG_OBJECT, poss(statement.elementVariable.type, 3));	
 				statement.elementVariable.type = newType;
@@ -430,48 +429,49 @@ public class CompilerExtensions {
 		}
 	}
 	
-	public static int setPublicAccess(int modifiers) {
-		modifiers &= ~ClassFileConstants.AccPrivate;
-		modifiers &= ~ClassFileConstants.AccProtected;
-		modifiers |= ClassFileConstants.AccPublic;
+	public static final int AccPublicPrivateProctected = 0x0007;
+	
+	public static int setPublicByDefault(int modifiers) {
+		if ((modifiers & AccPublicPrivateProctected) == 0) {
+			modifiers |= ClassFileConstants.AccPublic;
+		}
 		return modifiers;
 	}
 	
-	public static void handleStructEndParse(TypeDeclaration type) {
-		ExtensionsConfig.log("handleStructEndParse: declaration: " + ExtensionsConfig.asLog(type)); //$NON-NLS-1$
-		if (!type.isStruct) return;
-		type.modifiers = setPublicAccess(type.modifiers);
-		if (type.fields != null) {
-			for (FieldDeclaration field: type.fields) {
-				field.modifiers = setPublicAccess(field.modifiers);
-			}
-		}
-		if (type.methods != null) {
-			for (AbstractMethodDeclaration method: type.methods) {
-				if ((method instanceof MethodDeclaration) ||
-						(method instanceof ConstructorDeclaration)) {
-					method.modifiers = setPublicAccess(method.modifiers);
+	public static void handleStructForType(TypeDeclaration type) {
+		ExtensionsConfig.log("handleStructForType: type: " + ExtensionsConfig.asLog(type)); //$NON-NLS-1$
+		if (type.isStruct) {
+			if (type.fields != null) {
+				for (FieldDeclaration field: type.fields) {
+					field.modifiers = setPublicByDefault(field.modifiers);
 				}
-			}			
+			}
+			if (type.methods != null) {
+				for (AbstractMethodDeclaration method: type.methods) {
+					method.modifiers = setPublicByDefault(method.modifiers);
+				}			
+			}
 		}
 		if (type.memberTypes != null) {
 			for (TypeDeclaration memberType: type.memberTypes) {
-				memberType.modifiers = setPublicAccess(memberType.modifiers); // public even if not a struct
-				handleStructEndParse(memberType);
+				if (type.isStruct) {
+					memberType.modifiers = setPublicByDefault(memberType.modifiers);
+				}
+				handleStructForType(memberType);
 			}
 		}
 	}
 	
-	public static void handleStructEndParse(CompilationUnitDeclaration unit) {
-		ExtensionsConfig.log("handleStructEndParse: unit: " + ExtensionsConfig.asLog(unit)); //$NON-NLS-1$
+	public static void handleStructForUnit(CompilationUnitDeclaration unit) {
+		ExtensionsConfig.log("handleStructForUnit: unit: " + ExtensionsConfig.asLog(unit)); //$NON-NLS-1$
 		if (unit.types != null) {
 			for (TypeDeclaration type: unit.types) {
-				handleStructEndParse(type);
+				handleStructForType(type);
 			}
 		}
 	}
 	
-	public static void handleDefaultArgumentsMethod(MethodDeclaration copy, int argumentIndex) {
+	public static void AddDefaultArgumentsMethodInvocation(MethodDeclaration copy, int argumentIndex) {
 		int sourceStart = copy.bodyStart, sourceEnd = copy.bodyEnd;
 		copy.bits |= GeneratedBit;
 		MessageSend invocation = new MessageSend();
@@ -505,18 +505,18 @@ public class CompilerExtensions {
 		copy.statements[0] = invocation;
 	}
 	
-	public static int handleDefaultArgumentsEndParse(MethodDeclaration method, AbstractMethodDeclaration[] methods, int index) {
+	public static int handleDefaultArgumentsForMethod(MethodDeclaration method, AbstractMethodDeclaration[] methods, int index) {
 		for (int argumentIndex = method.arguments.length - 1; argumentIndex >= 0; argumentIndex--) {
 			Argument argument = method.arguments[argumentIndex];
 			if (argument.defaultExpression == null) break;	
 			MethodDeclaration copy = cloner.deepClone(method);
-			handleDefaultArgumentsMethod(copy, argumentIndex);
+			AddDefaultArgumentsMethodInvocation(copy, argumentIndex);
 			methods[index++] = copy;
 		}
 		return index;
 	}
 	
-	public static void handleDefaultArgumentsConstructor(ConstructorDeclaration copy, int argumentIndex) {
+	public static void addDefaultArgumentsConstructorCall(ConstructorDeclaration copy, int argumentIndex) {
 		int sourceStart = copy.bodyStart, sourceEnd = copy.bodyEnd;	
 		copy.bits |= GeneratedBit;	
 		ExplicitConstructorCall invocation = new ExplicitConstructorCall(ExplicitConstructorCall.This);
@@ -539,19 +539,19 @@ public class CompilerExtensions {
 		copy.constructorCall = invocation;
 	}
 	
-	public static int handleDefaultArgumentsEndParse(ConstructorDeclaration constructor, AbstractMethodDeclaration[] methods, int index) {
+	public static int handleDefaultArgumentsForConstructor(ConstructorDeclaration constructor, AbstractMethodDeclaration[] methods, int startIndex) {
 		for (int argumentIndex = constructor.arguments.length - 1; argumentIndex >= 0; argumentIndex--) {
 			Argument argument = constructor.arguments[argumentIndex];
 			if (argument.defaultExpression == null) break;
 			ConstructorDeclaration copy = cloner.deepClone(constructor);
-			handleDefaultArgumentsConstructor(copy, argumentIndex);
-			methods[index++] = copy;
+			addDefaultArgumentsConstructorCall(copy, argumentIndex);
+			methods[startIndex++] = copy;
 		}
-		return index;
+		return startIndex;
 	}
 	
-	public static void handleDefaultArgumentsEndParse(CompilationUnitDeclaration unit) {
-		ExtensionsConfig.log("handleDefaultArgumentsEndParse: unit: " + ExtensionsConfig.asLog(unit)); //$NON-NLS-1$
+	public static void handleDefaultArgumentsForUnit(CompilationUnitDeclaration unit) {
+		ExtensionsConfig.log("handleDefaultArgumentsForUnit: unit: " + ExtensionsConfig.asLog(unit)); //$NON-NLS-1$
 		if (unit.types != null) {
 			for (TypeDeclaration type: unit.types) {
 				if (type.methods == null) continue;
@@ -572,9 +572,9 @@ public class CompilerExtensions {
 					AbstractMethodDeclaration method = type.methods[i];	
 					if (method.arguments == null) continue;
 					if (method instanceof MethodDeclaration) {
-						j = handleDefaultArgumentsEndParse((MethodDeclaration) method, methods, j);
+						j = handleDefaultArgumentsForMethod((MethodDeclaration) method, methods, j);
 					} else if (method instanceof ConstructorDeclaration) {
-						j = handleDefaultArgumentsEndParse((ConstructorDeclaration) method, methods, j);
+						j = handleDefaultArgumentsForConstructor((ConstructorDeclaration) method, methods, j);
 					}
 				}
 				type.methods = methods;
@@ -584,10 +584,10 @@ public class CompilerExtensions {
 	
 	public static final int ProcessedBit = ASTNode.Bit24;
 	
-	public static void handleEndParse(CompilationUnitDeclaration unit) {
+	public static void handleEndParse(CompilationUnitDeclaration unit, CompilerOptions options) {
 		if ((unit.bits & ProcessedBit) == 0) {
-			handleStructEndParse(unit);
-			handleDefaultArgumentsEndParse(unit);
+			handleStructForUnit(unit);
+			handleDefaultArgumentsForUnit(unit);
 			unit.bits |= ProcessedBit;
 		}
 	}
