@@ -3365,11 +3365,6 @@ private int internalScanIdentifierOrKeyword(int index, int length, char[] data) 
 							&& (data[++index] == 'i')
 							&& (data[++index] == 'c')) {
 							return TokenNamestatic;
-						} else if ((data[index] == 'r')
-							&& (data[++index] == 'u')
-							&& (data[++index] == 'c')
-							&& (data[++index] == 't')) {
-							return TokenNamestruct;
 						} else
 							return TokenNameIdentifier;
 					else
@@ -3921,8 +3916,6 @@ public String toStringAction(int act) {
 			return "char"; //$NON-NLS-1$
 		case TokenNameclass :
 			return "class"; //$NON-NLS-1$
-		case TokenNamestruct :
-			return "struct"; //$NON-NLS-1$
 		case TokenNamecontinue :
 			return "continue"; //$NON-NLS-1$
 		case TokenNamedefault :
@@ -4178,7 +4171,6 @@ public static boolean isKeyword(int token) {
 		case TerminalTokens.TokenNamechar:
 		case TerminalTokens.TokenNamecatch:
 		case TerminalTokens.TokenNameclass:
-		case TerminalTokens.TokenNamestruct:
 		case TerminalTokens.TokenNamecontinue:
 		case TerminalTokens.TokenNamedo:
 		case TerminalTokens.TokenNamedouble:
@@ -4439,7 +4431,6 @@ protected final boolean maybeAtReferenceExpression() { // Did the '<' we saw jus
 				case TokenNameSEMICOLON:  // for (int i = 0; i < 10; i++);
 				case TokenNameRBRACE:     // class X { void foo() {} X<String> x = null; }
 				case TokenNameclass:      // class X<T> {}
-				case TokenNamestruct:     // struct X<T> {}
 				case TokenNameinterface:  // interface I<T> {}
 				case TokenNameenum:       // enum E<T> {}
 				case TokenNamefinal:      // final Collection<String>
@@ -4560,7 +4551,6 @@ public int fastForward(Statement unused) {
 			case TokenNamecase:
 			case TokenNamechar:
 			case TokenNameclass:
-			case TokenNamestruct:
 			case TokenNamecontinue:
 			case TokenNamedefault:
 			case TokenNamedo:

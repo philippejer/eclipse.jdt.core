@@ -3,21 +3,23 @@ package org.eclipse.jdt.core.internal.compiler.extensions;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 
 import org.eclipse.jdt.core.Signature;
 import org.eclipse.jdt.core.extensions.ExtensionsConfig;
+import org.eclipse.jdt.internal.compiler.ASTVisitor;
 import org.eclipse.jdt.internal.compiler.CompilationResult;
 import org.eclipse.jdt.internal.compiler.ast.ASTNode;
 import org.eclipse.jdt.internal.compiler.ast.AbstractMethodDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.AllocationExpression;
 import org.eclipse.jdt.internal.compiler.ast.Annotation;
+import org.eclipse.jdt.internal.compiler.ast.AnnotationMethodDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.Argument;
 import org.eclipse.jdt.internal.compiler.ast.ArrayAllocationExpression;
 import org.eclipse.jdt.internal.compiler.ast.ArrayInitializer;
 import org.eclipse.jdt.internal.compiler.ast.ArrayQualifiedTypeReference;
 import org.eclipse.jdt.internal.compiler.ast.ArrayTypeReference;
+import org.eclipse.jdt.internal.compiler.ast.Clinit;
 import org.eclipse.jdt.internal.compiler.ast.CompilationUnitDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.ConstructorDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.ExplicitConstructorCall;
@@ -56,6 +58,7 @@ import org.eclipse.jdt.internal.compiler.lookup.Binding;
 import org.eclipse.jdt.internal.compiler.lookup.BlockScope;
 import org.eclipse.jdt.internal.compiler.lookup.CaptureBinding;
 import org.eclipse.jdt.internal.compiler.lookup.ClassScope;
+import org.eclipse.jdt.internal.compiler.lookup.CompilationUnitScope;
 import org.eclipse.jdt.internal.compiler.lookup.ElementValuePair;
 import org.eclipse.jdt.internal.compiler.lookup.MethodBinding;
 import org.eclipse.jdt.internal.compiler.lookup.MethodScope;
@@ -439,37 +442,59 @@ public class CompilerExtensions {
 		return modifiers;
 	}
 	
-	public static void handlePublicByDefaultForType(TypeDeclaration type, HashSet<TypeDeclaration> visitedTypes) {
-		if (visitedTypes.contains(type)) return;
-		visitedTypes.add(type);
-		ExtensionsConfig.log("handlePublicByDefaultForType: type: " + ExtensionsConfig.asLog(type)); //$NON-NLS-1$
-		if (type.fields != null) {
-			for (FieldDeclaration field: type.fields) {
-				if (field.type == null) continue; // implicit type: enum constant so no modifiers allowed
-				field.modifiers = setPublicByDefault(field.modifiers);
-			}
-		}
-		if (type.methods != null) {
-			for (AbstractMethodDeclaration method: type.methods) {
-				method.modifiers = setPublicByDefault(method.modifiers);
-			}			
-		}
-		if (type.memberTypes != null) {
-			for (TypeDeclaration memberType: type.memberTypes) {
-				memberType.modifiers = setPublicByDefault(memberType.modifiers);
-				handlePublicByDefaultForType(memberType, visitedTypes);
-			}
-		}
-	}
-	
 	public static void handlePublicByDefaultForUnit(CompilationUnitDeclaration unit) {
 		ExtensionsConfig.log("handlePublicByDefaultForUnit: unit: " + ExtensionsConfig.asLog(unit)); //$NON-NLS-1$
-		HashSet<TypeDeclaration> visitedTypes = new HashSet<>();
-		if (unit.types != null) {
-			for (TypeDeclaration type: unit.types) {
-				handlePublicByDefaultForType(type, visitedTypes);
+		unit.traverse(new ASTVisitor() {
+			@Override
+			public boolean visit(AnnotationMethodDeclaration annotationTypeDeclaration, ClassScope classScope) {
+				// not needed
+				return super.visit(annotationTypeDeclaration, classScope);
 			}
-		}
+
+			@Override
+			public boolean visit(Clinit clinit, ClassScope scope) {
+				// not needed
+				return super.visit(clinit, scope);
+			}
+
+			@Override
+			public boolean visit(ConstructorDeclaration constructorDeclaration, ClassScope scope) {
+				constructorDeclaration.modifiers = setPublicByDefault(constructorDeclaration.modifiers);
+				return super.visit(constructorDeclaration, scope);
+			}
+
+			@Override
+			public boolean visit(FieldDeclaration fieldDeclaration, MethodScope scope) {
+				if (fieldDeclaration.type != null) { // public modifier not allowed for enums
+					fieldDeclaration.modifiers = setPublicByDefault(fieldDeclaration.modifiers);
+				}
+				return super.visit(fieldDeclaration, scope);
+			}
+
+			@Override
+			public boolean visit(MethodDeclaration methodDeclaration, ClassScope scope) {
+				methodDeclaration.modifiers = setPublicByDefault(methodDeclaration.modifiers);
+				return super.visit(methodDeclaration, scope);
+			}
+
+			@Override
+			public boolean visit(TypeDeclaration localTypeDeclaration, BlockScope scope) {
+				// not allowed on local types
+				return super.visit(localTypeDeclaration, scope);
+			}
+
+			@Override
+			public boolean visit(TypeDeclaration memberTypeDeclaration, ClassScope scope) {
+				memberTypeDeclaration.modifiers = setPublicByDefault(memberTypeDeclaration.modifiers);
+				return super.visit(memberTypeDeclaration, scope);
+			}
+
+			@Override
+			public boolean visit(TypeDeclaration typeDeclaration, CompilationUnitScope scope) {
+				typeDeclaration.modifiers = setPublicByDefault(typeDeclaration.modifiers);
+				return super.visit(typeDeclaration, scope);
+			}
+		}, unit.scope);
 	}
 	
 	public static void AddDefaultArgumentsMethodInvocation(MethodDeclaration copy, int argumentIndex) {
@@ -586,10 +611,10 @@ public class CompilerExtensions {
 	public static final int ProcessedBit = ASTNode.Bit24;
 	
 	public static void handleEndParse(CompilationUnitDeclaration unit, CompilerOptions options) {
+		if (options.publicByDefault) {
+			handlePublicByDefaultForUnit(unit);
+		}
 		if ((unit.bits & ProcessedBit) == 0) {
-			if (options.publicByDefault) {
-				handlePublicByDefaultForUnit(unit);
-			}
 			handleDefaultArgumentsForUnit(unit);
 			unit.bits |= ProcessedBit;
 		}
