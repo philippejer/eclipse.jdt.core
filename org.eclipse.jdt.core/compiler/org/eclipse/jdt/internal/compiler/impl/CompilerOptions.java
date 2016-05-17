@@ -187,6 +187,7 @@ public class CompilerOptions {
 	public static final String OPTION_ReportNonnullParameterAnnotationDropped = "org.eclipse.jdt.core.compiler.problem.nonnullParameterAnnotationDropped";  //$NON-NLS-1$
 	public static final String OPTION_PessimisticNullAnalysisForFreeTypeVariables = "org.eclipse.jdt.core.compiler.problem.pessimisticNullAnalysisForFreeTypeVariables";  //$NON-NLS-1$
 	public static final String OPTION_ReportNonNullTypeVariableFromLegacyInvocation = "org.eclipse.jdt.core.compiler.problem.nonnullTypeVariableFromLegacyInvocation"; //$NON-NLS-1$
+	public static final String OPTION_PublicByDefault = "org.eclipse.jdt.core.compiler.extensions.publicByDefault"; //$NON-NLS-1$
 	
 	/**
 	 * Possible values for configurable options
@@ -494,6 +495,8 @@ public class CompilerOptions {
 
 	/** Not directly configurable, derived from other options by LookupEnvironment.usesNullTypeAnnotations() */
 	public Boolean useNullTypeAnnotations = null;
+	
+	public boolean publicByDefault = false;
 	
 
 	// keep in sync with warningTokenToIrritant and warningTokenFromIrritant
@@ -1223,6 +1226,9 @@ public class CompilerOptions {
 		optionsMap.put(OPTION_ReportUninternedIdentityComparison, this.complainOnUninternedIdentityComparison ? ENABLED : DISABLED);
 		optionsMap.put(OPTION_PessimisticNullAnalysisForFreeTypeVariables, getSeverityString(PessimisticNullAnalysisForFreeTypeVariables));
 		optionsMap.put(OPTION_ReportNonNullTypeVariableFromLegacyInvocation, getSeverityString(NonNullTypeVariableFromLegacyInvocation));
+		if (ExtensionsConfig.Enable) {
+			optionsMap.put(OPTION_PublicByDefault, this.publicByDefault ? ENABLED : DISABLED);			
+		}
 		return optionsMap;
 	}
 
@@ -1403,6 +1409,7 @@ public class CompilerOptions {
 		
 		if (ExtensionsConfig.Enable) {
 			this.storeAnnotations = true;
+			this.publicByDefault = false;
 		}
 	}
 
@@ -1905,6 +1912,11 @@ public class CompilerOptions {
 			}
 		}
 		if (ExtensionsConfig.Enable) {
+			if ((optionValue = optionsMap.get(OPTION_PublicByDefault)) != null) {
+				if (ENABLED.equals(optionValue)) {
+					this.publicByDefault = true;
+				}
+			}
 			this.storeAnnotations = true;
 		}
 	}
