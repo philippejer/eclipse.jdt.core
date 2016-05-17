@@ -3,6 +3,7 @@ package org.eclipse.jdt.core.internal.compiler.extensions;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 
 import org.eclipse.jdt.core.Signature;
@@ -438,35 +439,35 @@ public class CompilerExtensions {
 		return modifiers;
 	}
 	
-	public static void handleStructForType(TypeDeclaration type) {
-		ExtensionsConfig.log("handleStructForType: type: " + ExtensionsConfig.asLog(type)); //$NON-NLS-1$
-		if (type.isStruct) {
-			if (type.fields != null) {
-				for (FieldDeclaration field: type.fields) {
-					field.modifiers = setPublicByDefault(field.modifiers);
-				}
+	public static void handlePublicByDefaultForType(TypeDeclaration type, HashSet<TypeDeclaration> visitedTypes) {
+		if (visitedTypes.contains(type)) return;
+		visitedTypes.add(type);
+		ExtensionsConfig.log("handlePublicByDefaultForType: type: " + ExtensionsConfig.asLog(type)); //$NON-NLS-1$
+		if (type.fields != null) {
+			for (FieldDeclaration field: type.fields) {
+				if (field.type == null) continue; // implicit type: enum constant so no modifiers allowed
+				field.modifiers = setPublicByDefault(field.modifiers);
 			}
-			if (type.methods != null) {
-				for (AbstractMethodDeclaration method: type.methods) {
-					method.modifiers = setPublicByDefault(method.modifiers);
-				}			
-			}
+		}
+		if (type.methods != null) {
+			for (AbstractMethodDeclaration method: type.methods) {
+				method.modifiers = setPublicByDefault(method.modifiers);
+			}			
 		}
 		if (type.memberTypes != null) {
 			for (TypeDeclaration memberType: type.memberTypes) {
-				if (type.isStruct) {
-					memberType.modifiers = setPublicByDefault(memberType.modifiers);
-				}
-				handleStructForType(memberType);
+				memberType.modifiers = setPublicByDefault(memberType.modifiers);
+				handlePublicByDefaultForType(memberType, visitedTypes);
 			}
 		}
 	}
 	
-	public static void handleStructForUnit(CompilationUnitDeclaration unit) {
-		ExtensionsConfig.log("handleStructForUnit: unit: " + ExtensionsConfig.asLog(unit)); //$NON-NLS-1$
+	public static void handlePublicByDefaultForUnit(CompilationUnitDeclaration unit) {
+		ExtensionsConfig.log("handlePublicByDefaultForUnit: unit: " + ExtensionsConfig.asLog(unit)); //$NON-NLS-1$
+		HashSet<TypeDeclaration> visitedTypes = new HashSet<>();
 		if (unit.types != null) {
 			for (TypeDeclaration type: unit.types) {
-				handleStructForType(type);
+				handlePublicByDefaultForType(type, visitedTypes);
 			}
 		}
 	}
@@ -586,7 +587,9 @@ public class CompilerExtensions {
 	
 	public static void handleEndParse(CompilationUnitDeclaration unit, CompilerOptions options) {
 		if ((unit.bits & ProcessedBit) == 0) {
-			handleStructForUnit(unit);
+			if (options.publicByDefault) {
+				handlePublicByDefaultForUnit(unit);
+			}
 			handleDefaultArgumentsForUnit(unit);
 			unit.bits |= ProcessedBit;
 		}
