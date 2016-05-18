@@ -498,24 +498,21 @@ public class CompilerExtensions {
 		}, unit.scope);
 	}
 	
-	public static void AddDefaultArgumentsMethodInvocation(MethodDeclaration copy, int argumentIndex) {
-		int sourceStart = copy.bodyStart, sourceEnd = copy.bodyEnd;
+	public static MethodDeclaration createDefaultArgumentsMethod(MethodDeclaration method, int argumentIndex) {
+		MethodDeclaration copy = cloner.deepClone(method);
+		int position = method.bodyEnd;
 		copy.bits |= GeneratedBit;
 		MessageSend invocation = new MessageSend();
-		invocation.sourceStart = sourceStart;
-		invocation.sourceEnd = sourceEnd;
-		invocation.statementEnd = sourceEnd;
+		invocation.sourceStart = invocation.sourceEnd = invocation.statementEnd = position;
 		invocation.receiver = ThisReference.implicitThis();
-		invocation.receiver.sourceStart = sourceStart;
-		invocation.receiver.sourceEnd = sourceEnd;	
-		invocation.receiver.statementEnd = sourceEnd;
-		invocation.nameSourcePosition = pos(sourceStart, sourceEnd);
+		invocation.receiver.sourceStart = invocation.receiver.sourceEnd = invocation.receiver.statementEnd = position;
+		invocation.nameSourcePosition = pos(position, position);
 		invocation.selector = copy.selector;
 		invocation.arguments = new Expression[copy.arguments.length];
 		for (int i = 0; i < invocation.arguments.length; i++) {
 			Argument argument = copy.arguments[i];
 			if (i < argumentIndex) {
-				invocation.arguments[i] = new SingleNameReference(argument.name, pos(sourceStart, sourceEnd));
+				invocation.arguments[i] = new SingleNameReference(argument.name, pos(position, position));
 			} else {
 				invocation.arguments[i] = argument.defaultExpression;
 			}
@@ -527,33 +524,33 @@ public class CompilerExtensions {
 		}		
 		copy.statements = new Statement[1];
 		if (!isVoid(copy.returnType)) {
-			copy.statements[0] = new ReturnStatement(invocation, sourceStart, sourceEnd);
+			copy.statements[0] = new ReturnStatement(invocation, position, position);
 		}
 		copy.statements[0] = invocation;
+		return copy;
 	}
 	
 	public static int handleDefaultArgumentsForMethod(MethodDeclaration method, AbstractMethodDeclaration[] methods, int index) {
 		for (int argumentIndex = method.arguments.length - 1; argumentIndex >= 0; argumentIndex--) {
 			Argument argument = method.arguments[argumentIndex];
-			if (argument.defaultExpression == null) break;	
-			MethodDeclaration copy = cloner.deepClone(method);
-			AddDefaultArgumentsMethodInvocation(copy, argumentIndex);
-			methods[index++] = copy;
+			if (argument.defaultExpression == null) break;
+			methods[index++] = createDefaultArgumentsMethod(method, argumentIndex);
 		}
 		return index;
 	}
 	
-	public static void addDefaultArgumentsConstructorCall(ConstructorDeclaration copy, int argumentIndex) {
-		int sourceStart = copy.bodyStart, sourceEnd = copy.bodyEnd;	
+	public static ConstructorDeclaration createDefaultArgumentsConstructor(ConstructorDeclaration constructor, int argumentIndex) {
+		ConstructorDeclaration copy = cloner.deepClone(constructor);
+		int position = constructor.bodyEnd;
 		copy.bits |= GeneratedBit;	
 		ExplicitConstructorCall invocation = new ExplicitConstructorCall(ExplicitConstructorCall.This);
-		invocation.sourceStart = sourceStart;
-		invocation.sourceEnd = sourceEnd;
-		invocation.arguments = new Expression[copy.arguments.length];
+		invocation.sourceStart = invocation.sourceEnd = position;
+		invocation.typeArgumentsSourceStart = position;
+		invocation.arguments = new Expression[copy.arguments.length];		
 		for (int i = 0; i < invocation.arguments.length; i++) {
 			Argument argument = copy.arguments[i];
 			if (i < argumentIndex) {
-				invocation.arguments[i] = new SingleNameReference(argument.name, pos(sourceStart, sourceEnd));
+				invocation.arguments[i] = new SingleNameReference(argument.name, position);
 			} else {
 				invocation.arguments[i] = argument.defaultExpression;
 			}
@@ -564,15 +561,14 @@ public class CompilerExtensions {
 			copy.arguments = null;
 		}		
 		copy.constructorCall = invocation;
+		return copy;
 	}
 	
 	public static int handleDefaultArgumentsForConstructor(ConstructorDeclaration constructor, AbstractMethodDeclaration[] methods, int startIndex) {
 		for (int argumentIndex = constructor.arguments.length - 1; argumentIndex >= 0; argumentIndex--) {
 			Argument argument = constructor.arguments[argumentIndex];
-			if (argument.defaultExpression == null) break;
-			ConstructorDeclaration copy = cloner.deepClone(constructor);
-			addDefaultArgumentsConstructorCall(copy, argumentIndex);
-			methods[startIndex++] = copy;
+			if (argument.defaultExpression == null) break;			
+			methods[startIndex++] = createDefaultArgumentsConstructor(constructor, argumentIndex);
 		}
 		return startIndex;
 	}
