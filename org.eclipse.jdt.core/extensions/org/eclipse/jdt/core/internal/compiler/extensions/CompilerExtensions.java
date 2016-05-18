@@ -36,6 +36,7 @@ import org.eclipse.jdt.internal.compiler.ast.MethodDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.NullLiteral;
 import org.eclipse.jdt.internal.compiler.ast.ParameterizedQualifiedTypeReference;
 import org.eclipse.jdt.internal.compiler.ast.ParameterizedSingleTypeReference;
+import org.eclipse.jdt.internal.compiler.ast.QualifiedNameReference;
 import org.eclipse.jdt.internal.compiler.ast.QualifiedTypeReference;
 import org.eclipse.jdt.internal.compiler.ast.ReturnStatement;
 import org.eclipse.jdt.internal.compiler.ast.SingleNameReference;
@@ -655,10 +656,10 @@ public class CompilerExtensions {
 	public static final char[][] CALL_LINE_NAME = buildName(EXTENSIONS_NAME, asChars("CallLine")); //$NON-NLS-1$
 	public static final char[][] CALL_CLASS_NAME = buildName(EXTENSIONS_NAME, asChars("CallClass")); //$NON-NLS-1$
 	public static final char[][] CALL_METHOD_NAME = buildName(EXTENSIONS_NAME, asChars("CallMethod")); //$NON-NLS-1$
-	public static final char[][] CALL_ARG_NAME = buildName(EXTENSIONS_NAME, asChars("CallArg")); //$NON-NLS-1$
-	public static final char[][] CALL_ARGS_NAME = buildName(EXTENSIONS_NAME, asChars("CallArgs")); //$NON-NLS-1$		
+	public static final char[][] CALL_NAME_NAME = buildName(EXTENSIONS_NAME, asChars("CallName")); //$NON-NLS-1$
+	public static final char[][] CALL_NAMES_NAME = buildName(EXTENSIONS_NAME, asChars("CallNames")); //$NON-NLS-1$		
 	public static final char[][][] SYNTHETIC_NAMES = {CALL_FILE_NAME, CALL_LINE_NAME, CALL_CLASS_NAME, CALL_METHOD_NAME,
-			CALL_ARG_NAME, CALL_ARGS_NAME };	
+			CALL_NAME_NAME, CALL_NAMES_NAME };	
 	public static final char[] VALUE_NAME = asChars("value"); //$NON-NLS-1$
 	
 	public static boolean isSyntheticParameterAnnotation(AnnotationBinding annotation) {
@@ -690,12 +691,12 @@ public class CompilerExtensions {
 		return matches(CALL_METHOD_NAME, annotation.getAnnotationType().compoundName);
 	}
 	
-	public static boolean isCallArgAnnotation(AnnotationBinding annotation) {
-		return matches(CALL_ARG_NAME, annotation.getAnnotationType().compoundName);
+	public static boolean isCallNameAnnotation(AnnotationBinding annotation) {
+		return matches(CALL_NAME_NAME, annotation.getAnnotationType().compoundName);
 	}
 	
-	public static boolean isCallArgsAnnotation(AnnotationBinding annotation) {
-		return matches(CALL_ARGS_NAME, annotation.getAnnotationType().compoundName);
+	public static boolean isCallNamesAnnotation(AnnotationBinding annotation) {
+		return matches(CALL_NAMES_NAME, annotation.getAnnotationType().compoundName);
 	}
 	
 	public static char[] extractChars(char[] source, int start, int end) {
@@ -832,22 +833,26 @@ public class CompilerExtensions {
 		return new StringLiteral(declaration.selector, position, position, 0);
 	}
 	
-	public static Expression findCallArgExpression(Expression expression, Scope scope) {
+	public static Expression findCallNameExpression(Expression expression, Scope scope) {
 		if (expression instanceof SingleNameReference) {
 			return expression;
+		} else if (expression instanceof QualifiedNameReference) {
+			QualifiedNameReference reference = (QualifiedNameReference) expression;
+			return new SingleNameReference(reference.tokens[reference.tokens.length - 1],
+					reference.sourcePositions[reference.sourcePositions.length - 1]);
 		} else if (expression instanceof Invocation) {
 			Invocation invocation = (Invocation) expression;
 			Expression[] arguments = invocation.arguments();
 			if (arguments == null) return null;
 			for (Expression argument: arguments) {
-				Expression foundExpression = findCallArgExpression(argument, scope);
+				Expression foundExpression = findCallNameExpression(argument, scope);
 				if (foundExpression != null) return foundExpression;
 			}
 		}
 		return null;
 	}
 	
-	public static Expression makeCallArgExpression(Invocation invocation, Scope scope, int index) {
+	public static Expression makeCallNameExpression(Invocation invocation, Scope scope, int index) {
 		int position = invocation.sourceEnd();
 		ClassScope classScope = scope.classScope();
 		if (classScope == null) return new NullLiteral(position, position);
@@ -858,14 +863,14 @@ public class CompilerExtensions {
 		if ((index < 0) || (index >= arguments.length)) return new NullLiteral(position, position);
 		Expression argument = arguments[index];
 		if (argument == null) return new NullLiteral(position, position);
-		Expression foundArgument = findCallArgExpression(argument, scope);
+		Expression foundArgument = findCallNameExpression(argument, scope);
 		if (foundArgument == null) foundArgument = argument;
 		char[] contents = compilationUnit.compilationResult().compilationUnit.getContents();
 		char[] argumentChars = extractChars(contents, foundArgument.sourceStart, foundArgument.sourceEnd);
 		return new StringLiteral(argumentChars, position, position, 0);		
 	}
 	
-	public static Expression makeCallArgsExpression(Invocation invocation, Scope scope) {
+	public static Expression makeCallNamesExpression(Invocation invocation, Scope scope, int index) {
 		int position = invocation.sourceEnd();
 		ClassScope classScope = scope.classScope();
 		if (classScope == null) return new NullLiteral(position, position);
@@ -879,14 +884,14 @@ public class CompilerExtensions {
 		if (arguments == null) {
 			result.initializer.expressions = new Expression[0];
 		} else {
-			result.initializer.expressions = new Expression[arguments.length];
-			for (int i = 0; i < arguments.length; i++) {
+			result.initializer.expressions = new Expression[arguments.length - index];
+			for (int i = index; i < arguments.length; i++) {
 				Expression argument = arguments[i];
-				Expression foundArgument = findCallArgExpression(argument, scope);
+				Expression foundArgument = findCallNameExpression(argument, scope);
 				if (foundArgument == null) foundArgument = argument;
 				char[] contents = compilationUnit.compilationResult().compilationUnit.getContents();
 				char[] argumentChars = extractChars(contents, foundArgument.sourceStart, foundArgument.sourceEnd);
-				result.initializer.expressions[i] = new StringLiteral(argumentChars, position, position, 0);		
+				result.initializer.expressions[i - index] = new StringLiteral(argumentChars, position, position, 0);		
 			}
 		}
 		return result;
@@ -972,11 +977,10 @@ public class CompilerExtensions {
 					newArguments[i] = makeCallClassExpression(invocation, scope);
 				} else if (isCallMethodAnnotation(annotation)) {
 					newArguments[i] = makeCallMethodExpression(invocation, scope);
-				} else if (isCallArgAnnotation(annotation)) {
-					int index = j;
-					newArguments[i] = makeCallArgExpression(invocation, scope, index);
-				} else if (isCallArgsAnnotation(annotation)) {
-					newArguments[i] = makeCallArgsExpression(invocation, scope);
+				} else if (isCallNameAnnotation(annotation)) {
+					newArguments[i] = makeCallNameExpression(invocation, scope, j);
+				} else if (isCallNamesAnnotation(annotation)) {
+					newArguments[i] = makeCallNamesExpression(invocation, scope, j);
 				} else {
 					newArguments[i] = makeDefaultLiteral(method.parameters[i], invocation.sourceEnd(), invocation.sourceEnd());
 				}
@@ -1028,7 +1032,7 @@ public class CompilerExtensions {
 				AnnotationBinding annotationType = annotation.getCompilerAnnotation();
 				if (annotationType == null) continue;
 				if (isCallFileAnnotation(annotationType) || isCallClassAnnotation(annotationType) || isCallMethodAnnotation(annotationType)
-						|| isCallArgAnnotation(annotationType)) {
+						|| isCallNameAnnotation(annotationType)) {
 					TypeBinding stringBinding = scope.getJavaLangString();
 					if (!stringBinding.isCompatibleWith(argumentType)) {
 						addProblem(scope, argument.type.sourceStart, argument.type.sourceEnd,
@@ -1040,7 +1044,7 @@ public class CompilerExtensions {
 						addProblem(scope, argument.type.sourceStart, argument.type.sourceEnd,
 								"int expected", true); //$NON-NLS-1$
 					}
-				} else if (isCallArgsAnnotation(annotationType)) {
+				} else if (isCallNamesAnnotation(annotationType)) {
 					TypeBinding stringBinding = scope.getJavaLangString();
 					TypeBinding arrayBinding = scope.createArrayType(stringBinding, 1);
 					if (!arrayBinding.isCompatibleWith(argumentType)) {
