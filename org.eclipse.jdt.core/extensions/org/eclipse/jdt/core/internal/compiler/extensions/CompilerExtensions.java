@@ -832,6 +832,21 @@ public class CompilerExtensions {
 		return new StringLiteral(declaration.selector, position, position, 0);
 	}
 	
+	public static Expression findCallArgExpression(Expression expression, Scope scope) {
+		if (expression instanceof SingleNameReference) {
+			return expression;
+		} else if (expression instanceof Invocation) {
+			Invocation invocation = (Invocation) expression;
+			Expression[] arguments = invocation.arguments();
+			if (arguments == null) return null;
+			for (Expression argument: arguments) {
+				Expression foundExpression = findCallArgExpression(argument, scope);
+				if (foundExpression != null) return foundExpression;
+			}
+		}
+		return null;
+	}
+	
 	public static Expression makeCallArgExpression(Invocation invocation, Scope scope, int index) {
 		int position = invocation.sourceEnd();
 		ClassScope classScope = scope.classScope();
@@ -842,8 +857,11 @@ public class CompilerExtensions {
 		if (arguments == null) return new NullLiteral(position, position);
 		if ((index < 0) || (index >= arguments.length)) return new NullLiteral(position, position);
 		Expression argument = arguments[index];
+		if (argument == null) return new NullLiteral(position, position);
+		Expression foundArgument = findCallArgExpression(argument, scope);
+		if (foundArgument == null) foundArgument = argument;
 		char[] contents = compilationUnit.compilationResult().compilationUnit.getContents();
-		char[] argumentChars = extractChars(contents, argument.sourceStart, argument.sourceEnd);
+		char[] argumentChars = extractChars(contents, foundArgument.sourceStart, foundArgument.sourceEnd);
 		return new StringLiteral(argumentChars, position, position, 0);		
 	}
 	
@@ -864,8 +882,10 @@ public class CompilerExtensions {
 			result.initializer.expressions = new Expression[arguments.length];
 			for (int i = 0; i < arguments.length; i++) {
 				Expression argument = arguments[i];
+				Expression foundArgument = findCallArgExpression(argument, scope);
+				if (foundArgument == null) foundArgument = argument;
 				char[] contents = compilationUnit.compilationResult().compilationUnit.getContents();
-				char[] argumentChars = extractChars(contents, argument.sourceStart, argument.sourceEnd);
+				char[] argumentChars = extractChars(contents, foundArgument.sourceStart, foundArgument.sourceEnd);
 				result.initializer.expressions[i] = new StringLiteral(argumentChars, position, position, 0);		
 			}
 		}
