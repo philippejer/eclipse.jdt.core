@@ -435,7 +435,7 @@ public void computeConversion(Scope scope, TypeBinding runtimeTimeType, TypeBind
  */
 public void generateCode(BlockScope currentScope, CodeStream codeStream, boolean valueRequired) {
 	if (ExtensionsConfig.Enable) {
-		if (CompilerExtensions.isMessageSendDisabled(this.binding)) {
+		if (!CompilerExtensions.isMessageSendEnabled(this.binding, currentScope)) {
 			Expression expression = CompilerExtensions.makeDefaultLiteral(this.resolvedType, this.sourceStart, this.sourceEnd);
 			expression.resolveType(currentScope);
 			expression.generateCode(currentScope, codeStream, valueRequired);
