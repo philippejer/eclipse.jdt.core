@@ -5,6 +5,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import org.eclipse.jdt.core.IAnnotation;
+import org.eclipse.jdt.core.ILocalVariable;
+import org.eclipse.jdt.core.IMethod;
+import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.core.Signature;
 import org.eclipse.jdt.core.extensions.ExtensionsConfig;
 import org.eclipse.jdt.internal.compiler.ASTVisitor;
@@ -73,6 +77,7 @@ import org.eclipse.jdt.internal.compiler.lookup.WildcardBinding;
 import org.eclipse.jdt.internal.compiler.problem.DefaultProblem;
 import org.eclipse.jdt.internal.compiler.problem.ProblemSeverities;
 import org.eclipse.jdt.internal.compiler.util.Util;
+import org.eclipse.jdt.internal.core.SourceMethod;
 
 /**
  * Big ugly class that contains all compiler extensions related code.
@@ -522,7 +527,7 @@ public class CompilerExtensions {
 	public static final char[][] ARG_NAMES_NAME = buildName(EXTENSIONS_NAME, asChars("ArgNames")); //$NON-NLS-1$		
 	public static final char[][][] SYNTHETIC_NAMES = {CALLER_FILE_NAME, CALLER_LINE_NAME, CALLER_CLASS_NAME, CALLER_METHOD_NAME,
 			ARG_NAME_NAME, ARG_NAMES_NAME };
-	public static final char[] VALUE_NAME = asChars("value"); //$NON-NLS-1$
+	public static final char[] VALUE_NAME = asChars("value"); //$NON-NLS-1$	
 	
 	public static boolean isSyntheticParameterAnnotation(AnnotationBinding annotation) {
 		ReferenceBinding type = annotation.getAnnotationType();
@@ -683,6 +688,40 @@ public class CompilerExtensions {
 		ExtensionsConfig.log("handleSyntheticParametersForSignature: old signature: " + asString(methodSignature) + //$NON-NLS-1$
 				", new signature: " + asString(newMethodSignature)); //$NON-NLS-1$
 		return newMethodSignature;
+	}
+	
+	public static boolean mightBeSyntheticOrOptionalParameterAnnotation(String name) {
+		char[] nameChars = asChars(name);
+		for (int i = 0; i < SYNTHETIC_NAMES.length; i++) {
+			char[] lastChars = SYNTHETIC_NAMES[i][SYNTHETIC_NAMES[i].length - 1];
+			if (matches(lastChars, nameChars))
+				return true;
+		}
+		{
+			char[] lastChars = OPTIONAL_NAME[OPTIONAL_NAME.length - 1];
+			if (matches(lastChars, nameChars))
+				return true;
+		}
+		return false;
+	}
+	
+	public static boolean handleSyntheticOrOptionalParametersForMethodSearch(IMethod method) {
+		try {
+			if (!(method instanceof SourceMethod)) return true;
+			SourceMethod sourceMethod = (SourceMethod) method;
+			ILocalVariable[] parameters = sourceMethod.getParameters();
+			for (ILocalVariable parameter: parameters) {
+				IAnnotation[] annotations = parameter.getAnnotations();
+				for (IAnnotation annotation: annotations) {
+					if (mightBeSyntheticOrOptionalParameterAnnotation(annotation.getElementName())) {
+						return true;
+					}
+				}
+			}
+		} catch (JavaModelException e) {
+			// do nothing
+		}
+		return false;
 	}
 	
 	public static class ParameterNames {

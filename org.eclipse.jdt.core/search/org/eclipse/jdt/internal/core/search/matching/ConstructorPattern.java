@@ -17,6 +17,8 @@ import org.eclipse.jdt.core.Flags;
 import org.eclipse.jdt.core.IMethod;
 import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.core.compiler.CharOperation;
+import org.eclipse.jdt.core.extensions.ExtensionsConfig;
+import org.eclipse.jdt.core.internal.compiler.extensions.CompilerExtensions;
 import org.eclipse.jdt.core.search.IJavaSearchConstants;
 import org.eclipse.jdt.core.search.SearchPattern;
 import org.eclipse.jdt.internal.compiler.ExtraFlags;
@@ -367,6 +369,13 @@ public ConstructorPattern(
 		this.varargs = (method.getFlags() & Flags.AccVarargs) != 0;
 	} catch (JavaModelException e) {
 		// do nothing
+	}
+	
+	if (ExtensionsConfig.Enable) {
+		if (CompilerExtensions.handleSyntheticOrOptionalParametersForMethodSearch(method)) {
+			// hack to bypass the check on argument count (will not yield false positives)
+			this.varargs = true;
+		}
 	}
 
 	// Get unique key for parameterized constructors
