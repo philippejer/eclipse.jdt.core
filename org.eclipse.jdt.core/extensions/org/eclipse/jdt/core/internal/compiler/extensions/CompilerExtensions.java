@@ -45,6 +45,7 @@ import org.eclipse.jdt.internal.compiler.ast.QualifiedTypeReference;
 import org.eclipse.jdt.internal.compiler.ast.SingleNameReference;
 import org.eclipse.jdt.internal.compiler.ast.SingleTypeReference;
 import org.eclipse.jdt.internal.compiler.ast.StringLiteral;
+import org.eclipse.jdt.internal.compiler.ast.ThisReference;
 import org.eclipse.jdt.internal.compiler.ast.TypeDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.TypeReference;
 import org.eclipse.jdt.internal.compiler.ast.Wildcard;
@@ -831,12 +832,12 @@ public class CompilerExtensions {
 	}
 	
 	public static Expression findArgNameExpression(Expression expression, Scope scope) {
-		if (expression instanceof SingleNameReference) {
-			return expression;
-		} else if (expression instanceof QualifiedNameReference) {
+		if (expression instanceof QualifiedNameReference) {
 			QualifiedNameReference reference = (QualifiedNameReference) expression;
 			return new SingleNameReference(reference.tokens[reference.tokens.length - 1],
 					reference.sourcePositions[reference.sourcePositions.length - 1]);
+		} else if ((expression instanceof SingleNameReference) || (expression instanceof ThisReference)) {
+			return expression;
 		} else if (expression instanceof Invocation) {
 			Invocation invocation = (Invocation) expression;
 			Expression[] arguments = invocation.arguments();
@@ -847,6 +848,7 @@ public class CompilerExtensions {
 				if (nameExpression != null) return null; // two or more valid names in the arguments
 				nameExpression = foundExpression;
 			}
+			return nameExpression;
 		}
 		return null;
 	}
