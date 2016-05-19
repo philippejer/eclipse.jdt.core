@@ -583,7 +583,6 @@ public class CompilerExtensions {
 	
 	// lazily counts and stores synthetic annotations for method parameters
 	public static void initSyntheticParameterAnnotations(MethodBinding method) {
-		method = method.original();
 		if (method.numSyntheticAnnotations >= 0) return; // already done
 		method.numSyntheticAnnotations = 0;
 		AnnotationBinding[][] parameterAnnotations = method.getParameterAnnotations();
@@ -631,7 +630,6 @@ public class CompilerExtensions {
 	
 	// lazily counts and stores optional annotations for method parameters
 	public static void initOptionalParameterAnnotations(MethodBinding method) {
-		method = method.original();
 		if (method.numOptionalAnnotations >= 0) return; // already done
 		method.numOptionalAnnotations = 0;
 		AnnotationBinding[][] parameterAnnotations = method.getParameterAnnotations();
@@ -737,7 +735,8 @@ public class CompilerExtensions {
 	}
 	
 	public static void handleSyntheticParametersForCompletion(MethodBinding method, ParameterNames names, int initialLength) {
-		initSyntheticParameterAnnotations(method);		
+		method = method.original();
+		initSyntheticParameterAnnotations(method);
 		int numSyntheticAnnotations = method.numSyntheticAnnotations;
 		if (numSyntheticAnnotations == 0) return;
 		int newLength = initialLength - numSyntheticAnnotations;
@@ -757,7 +756,8 @@ public class CompilerExtensions {
 	}
 	
 	public static boolean handleOptionalParametersForCompletion(MethodBinding method) {		
-		CompilerExtensions.initOptionalParameterAnnotations(method);
+		method = method.original();
+		initOptionalParameterAnnotations(method);
 		if (method.numOptionalAnnotations == 0) return false;
 		if (method.savedParameters == null) method.savedParameters = method.parameters;
 		if ((method.parameters.length > 0) &&
