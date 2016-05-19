@@ -40,6 +40,7 @@ import org.eclipse.jdt.core.compiler.CharOperation;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.extensions.ExtensionsConfig;
 import org.eclipse.jdt.core.internal.compiler.extensions.CompilerExtensions;
+import org.eclipse.jdt.core.internal.compiler.extensions.CompilerExtensions.ParameterNames;
 import org.eclipse.jdt.core.search.IJavaSearchConstants;
 import org.eclipse.jdt.internal.codeassist.complete.*;
 import org.eclipse.jdt.internal.codeassist.impl.AssistParser;
@@ -456,7 +457,7 @@ public final class CompletionEngine
 	public HashtableOfObject typeCache;
 	public int openedBinaryTypes; // used during InternalCompletionProposal#findConstructorParameterNames()
 	
-	public static boolean DEBUG = false;
+	public static boolean DEBUG = true;
 	public static boolean PERF = false;
 	
 	private static final char[] KNOWN_TYPE_WITH_UNKNOWN_CONSTRUCTORS = new char[]{};
@@ -5288,24 +5289,11 @@ public final class CompletionEngine
 					char[][] parameterNames = findMethodParameterNames(constructor,parameterTypeNames);
 			
 					if (ExtensionsConfig.Enable && !forAnonymousType) {
-						CompilerExtensions.initSyntheticParameterAnnotations(constructor);
-						int numSyntheticAnnotations = constructor.numSyntheticAnnotations;
-						if (numSyntheticAnnotations > 0) {
-							int newLength = paramLength - numSyntheticAnnotations;
-							char[][] newParameterPackageNames = new char[newLength][];
-							char[][] newParameterTypeNames = new char[newLength][];
-							char[][] newParameterNames = new char[newLength][];
-							for (int i = 0, j = 0; i < paramLength; i++) {
-								if (constructor.syntheticAnnotations[i] == null) {
-									newParameterPackageNames[j] = parameterPackageNames[i];
-									newParameterTypeNames[j] = parameterTypeNames[i];
-									newParameterNames[j++] = parameterNames[i];
-								}
-							}
-							parameterPackageNames = newParameterPackageNames;
-							parameterTypeNames = newParameterTypeNames;
-							parameterNames = newParameterNames;
-						}
+						ParameterNames names = new ParameterNames(parameterPackageNames, parameterTypeNames, parameterNames);
+						CompilerExtensions.handleSyntheticParametersForCompletion(constructor, names, paramLength);
+						parameterPackageNames = names.parameterPackageNames;
+						parameterTypeNames = names.parameterTypeNames;
+						parameterNames = names.parameterNames;
 					}
 
 					char[] completion = CharOperation.NO_CHAR;
@@ -5530,12 +5518,12 @@ public final class CompletionEngine
 								proposal.setTokenRange(this.tokenStart - this.offset, this.tokenEnd - this.offset);
 								proposal.setRelevance(constructorRelevance);
 								if(parameterNames != null) proposal.setParameterNames(parameterNames);
+								if (ExtensionsConfig.Enable) {
+									proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(constructor, proposal.getSignature()));
+								}
 								this.requestor.accept(proposal);
 								if(DEBUG) {
 									this.printDebug(proposal);
-								}
-								if (ExtensionsConfig.Enable) {
-									proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(constructor, proposal.getSignature()));
 								}
 							}
 						} else {
@@ -5575,12 +5563,12 @@ public final class CompletionEngine
 								proposal.setTokenRange(this.tokenStart - this.offset, this.tokenEnd - this.offset);
 								proposal.setRelevance(relevance);
 								if(parameterNames != null) proposal.setParameterNames(parameterNames);
+								if (ExtensionsConfig.Enable) {
+									proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(constructor, proposal.getSignature()));
+								}
 								this.requestor.accept(proposal);
 								if(DEBUG) {
 									this.printDebug(proposal);
-								}
-								if (ExtensionsConfig.Enable) {
-									proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(constructor, proposal.getSignature()));
 								}
 							}
 							if ((this.assistNodeInJavadoc & CompletionOnJavadoc.TEXT) != 0 && !this.requestor.isIgnored(CompletionProposal.JAVADOC_METHOD_REF)) {
@@ -5608,15 +5596,22 @@ public final class CompletionEngine
 								proposal.setTokenRange(this.tokenStart - this.offset, this.tokenEnd - this.offset);
 								proposal.setRelevance(relevance+R_INLINE_TAG);
 								if(parameterNames != null) proposal.setParameterNames(parameterNames);
+								if (ExtensionsConfig.Enable) {
+									proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(constructor, proposal.getSignature()));
+								}
 								this.requestor.accept(proposal);
 								if(DEBUG) {
 									this.printDebug(proposal);
 								}
-								if (ExtensionsConfig.Enable) {
-									proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(constructor, proposal.getSignature()));
-								}
 							}
 						}
+					}
+				}
+				
+				if (ExtensionsConfig.Enable) {
+					if (CompilerExtensions.handleOptionalParametersForCompletion(constructor)) {
+						// try again with one less argument
+						f += 1;
 					}
 				}
 			}
@@ -8651,7 +8646,7 @@ public final class CompletionEngine
 					}
 				}
 			}
-
+			
 			newMethodsFound.add(new Object[]{method, receiverType});
 
 			ReferenceBinding superTypeWithSameErasure = (ReferenceBinding)receiverType.findSuperTypeOriginatingFrom(method.declaringClass);
@@ -8676,24 +8671,11 @@ public final class CompletionEngine
 			char[][] parameterNames = findMethodParameterNames(method,parameterTypeNames);
 			
 			if (ExtensionsConfig.Enable) {
-				CompilerExtensions.initSyntheticParameterAnnotations(method);
-				int numSyntheticAnnotations = method.numSyntheticAnnotations;
-				if (numSyntheticAnnotations > 0) {
-					int newLength = length - numSyntheticAnnotations;
-					char[][] newParameterPackageNames = new char[newLength][];
-					char[][] newParameterTypeNames = new char[newLength][];
-					char[][] newParameterNames = new char[newLength][];
-					for (int i = 0, j = 0; i < length; i++) {
-						if (method.syntheticAnnotations[i] == null) {
-							newParameterPackageNames[j] = parameterPackageNames[i];
-							newParameterTypeNames[j] = parameterTypeNames[i];
-							newParameterNames[j++] = parameterNames[i];
-						}
-					}
-					parameterPackageNames = newParameterPackageNames;
-					parameterTypeNames = newParameterTypeNames;
-					parameterNames = newParameterNames;
-				}
+				ParameterNames names = new ParameterNames(parameterPackageNames, parameterTypeNames, parameterNames);
+				CompilerExtensions.handleSyntheticParametersForCompletion(method, names, length);
+				parameterPackageNames = names.parameterPackageNames;
+				parameterTypeNames = names.parameterTypeNames;
+				parameterNames = names.parameterNames;
 			}
 
 			char[] completion = CharOperation.NO_CHAR;
@@ -8834,12 +8816,12 @@ public final class CompletionEngine
 					proposal.setTokenRange(this.tokenStart - this.offset, this.tokenEnd - this.offset);
 					proposal.setRelevance(relevance);
 					if(parameterNames != null) proposal.setParameterNames(parameterNames);
+					if (ExtensionsConfig.Enable) {
+						proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(method, proposal.getSignature()));
+					}
 					this.requestor.accept(proposal);
 					if(DEBUG) {
 						this.printDebug(proposal);
-					}
-					if (ExtensionsConfig.Enable) {
-						proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(method, proposal.getSignature()));
 					}
 				}
 
@@ -8868,12 +8850,12 @@ public final class CompletionEngine
 					proposal.setTokenRange(this.tokenStart - this.offset, this.tokenEnd - this.offset);
 					proposal.setRelevance(relevance+R_INLINE_TAG);
 					if(parameterNames != null) proposal.setParameterNames(parameterNames);
+					if (ExtensionsConfig.Enable) {
+						proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(method, proposal.getSignature()));
+					}
 					this.requestor.accept(proposal);
 					if(DEBUG) {
 						this.printDebug(proposal);
-					}
-					if (ExtensionsConfig.Enable) {
-						proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(method, proposal.getSignature()));
 					}
 				}
 			} else {
@@ -8913,17 +8895,24 @@ public final class CompletionEngine
 					proposal.setTokenRange(this.tokenStart - this.offset, this.tokenEnd - this.offset);
 					proposal.setRelevance(relevance);
 					if(parameterNames != null) proposal.setParameterNames(parameterNames);
+					if (ExtensionsConfig.Enable) {
+						proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(method, proposal.getSignature()));
+					}
 					this.requestor.accept(proposal);
 					if(DEBUG) {
 						this.printDebug(proposal);
-					}
-					if (ExtensionsConfig.Enable) {
-						proposal.setSignature(CompilerExtensions.handleSyntheticParametersForSignature(method, proposal.getSignature()));
 					}
 				}
 			}
 			this.startPosition = previousStartPosition;
 			this.tokenStart = previousTokenStart;
+				
+			if (ExtensionsConfig.Enable) {
+				if (CompilerExtensions.handleOptionalParametersForCompletion(method)) {
+					// try again with one less argument
+					f += 1;
+				}
+			}
 		}
 
 		methodsFound.addAll(newMethodsFound);

@@ -740,6 +740,7 @@ public TypeBinding resolveType(BlockScope scope) {
 	
 	if (ExtensionsConfig.Enable) {
 		CompilerExtensions.handleSyntheticArgumentsForMessageSend(this, scope);
+		CompilerExtensions.handleOptionalArgumentsForMessageSend(this, scope);
 	}
 
 	if (methodType != null && methodType.isPolyType()) {

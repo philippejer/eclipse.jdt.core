@@ -38,12 +38,9 @@ import org.eclipse.jdt.internal.compiler.ast.ParameterizedQualifiedTypeReference
 import org.eclipse.jdt.internal.compiler.ast.ParameterizedSingleTypeReference;
 import org.eclipse.jdt.internal.compiler.ast.QualifiedNameReference;
 import org.eclipse.jdt.internal.compiler.ast.QualifiedTypeReference;
-import org.eclipse.jdt.internal.compiler.ast.ReturnStatement;
 import org.eclipse.jdt.internal.compiler.ast.SingleNameReference;
 import org.eclipse.jdt.internal.compiler.ast.SingleTypeReference;
-import org.eclipse.jdt.internal.compiler.ast.Statement;
 import org.eclipse.jdt.internal.compiler.ast.StringLiteral;
-import org.eclipse.jdt.internal.compiler.ast.ThisReference;
 import org.eclipse.jdt.internal.compiler.ast.TypeDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.TypeReference;
 import org.eclipse.jdt.internal.compiler.ast.Wildcard;
@@ -74,24 +71,11 @@ import org.eclipse.jdt.internal.compiler.problem.DefaultProblem;
 import org.eclipse.jdt.internal.compiler.problem.ProblemSeverities;
 import org.eclipse.jdt.internal.compiler.util.Util;
 
-import com.rits.cloning.Cloner;
-
 /**
  * Big ugly class that contains all compiler extensions related code.
  * Much of the complex AST manipulation code comes from project Lombok.
  */
-public class CompilerExtensions {
-	
-	public static Cloner cloner = null;
-	
-	static {
-		// create and configure reflection-based object cloner for AST nodes
-		cloner = new Cloner();
-		// these should be shallow copied
-		cloner.setDontCloneInstanceOf(CompilationResult.class);
-		// check that only stuff directly derived by the parser is cloned
-		cloner.setDumpClonedClasses(false);
-	}
+public class CompilerExtensions {	
 	
 	public static void addProblem(Scope scope, int sourceStart, int sourceEnd, String message, boolean isError) {
 		ReferenceContext referenceContext = scope.referenceContext();
@@ -372,10 +356,6 @@ public class CompilerExtensions {
 	public static boolean isVar(TypeReference ref) {
 		return isSingleTypeReference(ref, VAR_NAME);
 	}
-
-	public static boolean isVoid(TypeReference ref) {
-		return isSingleTypeReference(ref, TypeConstants.VOID);
-	}
 	
 	public static TypeBinding resolveTypeLazy(Expression expression, BlockScope scope) {
 		if (expression.resolvedType != null) return expression.resolvedType;
@@ -498,129 +478,10 @@ public class CompilerExtensions {
 		}, unit.scope);
 	}
 	
-	public static MethodDeclaration createDefaultArgumentsMethod(MethodDeclaration method, int argumentIndex) {
-		MethodDeclaration copy = cloner.deepClone(method);
-		int position = method.bodyEnd;
-		copy.bits |= GeneratedBit;
-		MessageSend invocation = new MessageSend();
-		invocation.sourceStart = invocation.sourceEnd = invocation.statementEnd = position;
-		invocation.receiver = ThisReference.implicitThis();
-		invocation.receiver.sourceStart = invocation.receiver.sourceEnd = invocation.receiver.statementEnd = position;
-		invocation.nameSourcePosition = pos(position, position);
-		invocation.selector = copy.selector;
-		invocation.arguments = new Expression[copy.arguments.length];
-		for (int i = 0; i < invocation.arguments.length; i++) {
-			Argument argument = copy.arguments[i];
-			if (i < argumentIndex) {
-				invocation.arguments[i] = new SingleNameReference(argument.name, pos(position, position));
-			} else {
-				invocation.arguments[i] = argument.defaultExpression;
-			}
-		}
-		if (argumentIndex > 0) {
-			copy.arguments = Arrays.copyOf(copy.arguments, argumentIndex);
-		} else {
-			copy.arguments = null;
-		}		
-		copy.statements = new Statement[1];
-		if (!isVoid(copy.returnType)) {
-			copy.statements[0] = new ReturnStatement(invocation, position, position);
-		}
-		copy.statements[0] = invocation;
-		return copy;
-	}
-	
-	public static int handleDefaultArgumentsForMethod(MethodDeclaration method, AbstractMethodDeclaration[] methods, int index) {
-		for (int argumentIndex = method.arguments.length - 1; argumentIndex >= 0; argumentIndex--) {
-			Argument argument = method.arguments[argumentIndex];
-			if (argument.defaultExpression == null) break;
-			methods[index++] = createDefaultArgumentsMethod(method, argumentIndex);
-		}
-		return index;
-	}
-	
-	public static ConstructorDeclaration createDefaultArgumentsConstructor(ConstructorDeclaration constructor, int argumentIndex) {
-		ConstructorDeclaration copy = cloner.deepClone(constructor);
-		int position = constructor.bodyEnd;
-		copy.bits |= GeneratedBit;	
-		ExplicitConstructorCall invocation = new ExplicitConstructorCall(ExplicitConstructorCall.This);
-		invocation.sourceStart = invocation.sourceEnd = position;
-		invocation.typeArgumentsSourceStart = position;
-		invocation.arguments = new Expression[copy.arguments.length];		
-		for (int i = 0; i < invocation.arguments.length; i++) {
-			Argument argument = copy.arguments[i];
-			if (i < argumentIndex) {
-				invocation.arguments[i] = new SingleNameReference(argument.name, position);
-			} else {
-				invocation.arguments[i] = argument.defaultExpression;
-			}
-		}
-		if (argumentIndex > 0) {
-			copy.arguments = Arrays.copyOf(copy.arguments, argumentIndex);
-		} else {
-			copy.arguments = null;
-		}		
-		copy.constructorCall = invocation;
-		return copy;
-	}
-	
-	public static int handleDefaultArgumentsForConstructor(ConstructorDeclaration constructor, AbstractMethodDeclaration[] methods, int startIndex) {
-		for (int argumentIndex = constructor.arguments.length - 1; argumentIndex >= 0; argumentIndex--) {
-			Argument argument = constructor.arguments[argumentIndex];
-			if (argument.defaultExpression == null) break;			
-			methods[startIndex++] = createDefaultArgumentsConstructor(constructor, argumentIndex);
-		}
-		return startIndex;
-	}
-	
-	public static void handleDefaultArgumentsForUnit(CompilationUnitDeclaration unit) {
-		ExtensionsConfig.log("handleDefaultArgumentsForUnit: unit: " + ExtensionsConfig.asLog(unit)); //$NON-NLS-1$
-		if (unit.types != null) {
-			for (TypeDeclaration type: unit.types) {
-				if (type.methods == null) continue;
-				int numDefaultArguments = 0;
-				for (int i = 0; i < type.methods.length; i++) {
-					AbstractMethodDeclaration method = type.methods[i];
-					if (method.arguments == null) continue;
-					for (int j = method.arguments.length - 1; j >= 0; j--) {
-						Argument argument = method.arguments[j];
-						if (argument.defaultExpression == null) break;
-						numDefaultArguments += 1;			
-					}
-				}
-				if (numDefaultArguments == 0) continue;
-				AbstractMethodDeclaration[] methods = new AbstractMethodDeclaration[type.methods.length + numDefaultArguments];
-				System.arraycopy(type.methods, 0, methods, 0, type.methods.length);
-				for (int i = 0, j = type.methods.length; i < type.methods.length; i++) {
-					AbstractMethodDeclaration method = type.methods[i];	
-					if (method.arguments == null) continue;
-					if (method instanceof MethodDeclaration) {
-						j = handleDefaultArgumentsForMethod((MethodDeclaration) method, methods, j);
-					} else if (method instanceof ConstructorDeclaration) {
-						j = handleDefaultArgumentsForConstructor((ConstructorDeclaration) method, methods, j);
-					}
-				}
-				type.methods = methods;
-			}
-		}
-	}
-	
-	public static final int ProcessedBit = ASTNode.Bit24;
-	
 	public static void handleEndParse(CompilationUnitDeclaration unit, CompilerOptions options) {
 		if (options.publicByDefault) {
 			handlePublicByDefaultForUnit(unit);
 		}
-		if ((unit.bits & ProcessedBit) == 0) {
-			handleDefaultArgumentsForUnit(unit);
-			unit.bits |= ProcessedBit;
-		}
-	}
-	
-	public static final int GeneratedBit = ASTNode.Bit24;
-	
-	public static boolean isGeneratedMethod(AbstractMethodDeclaration method) {
-		return (method.bits & GeneratedBit) != 0;
 	}
 	
 	public static char[][] buildName(char[][] base, char[] ...names) {
@@ -647,15 +508,16 @@ public class CompilerExtensions {
 	}
 	
 	public static final char[][] EXTENSIONS_NAME = asChars("org", "eclipse", "jdt", "annotation", "extensions"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
-	public static final char[][] CALL_IF_NAME = buildName(EXTENSIONS_NAME, asChars("CallIf")); //$NON-NLS-1$
-	public static final char[][] CALL_FILE_NAME = buildName(EXTENSIONS_NAME, asChars("CallFile")); //$NON-NLS-1$
-	public static final char[][] CALL_LINE_NAME = buildName(EXTENSIONS_NAME, asChars("CallLine")); //$NON-NLS-1$
-	public static final char[][] CALL_CLASS_NAME = buildName(EXTENSIONS_NAME, asChars("CallClass")); //$NON-NLS-1$
-	public static final char[][] CALL_METHOD_NAME = buildName(EXTENSIONS_NAME, asChars("CallMethod")); //$NON-NLS-1$
-	public static final char[][] CALL_NAME_NAME = buildName(EXTENSIONS_NAME, asChars("CallName")); //$NON-NLS-1$
-	public static final char[][] CALL_NAMES_NAME = buildName(EXTENSIONS_NAME, asChars("CallNames")); //$NON-NLS-1$		
-	public static final char[][][] SYNTHETIC_NAMES = {CALL_FILE_NAME, CALL_LINE_NAME, CALL_CLASS_NAME, CALL_METHOD_NAME,
-			CALL_NAME_NAME, CALL_NAMES_NAME };	
+	public static final char[][] CONDITIONAL_NAME = buildName(EXTENSIONS_NAME, asChars("Conditional")); //$NON-NLS-1$
+	public static final char[][] OPTIONAL_NAME = buildName(EXTENSIONS_NAME, asChars("Optional")); //$NON-NLS-1$
+	public static final char[][] CALLER_FILE_NAME = buildName(EXTENSIONS_NAME, asChars("CallerFile")); //$NON-NLS-1$
+	public static final char[][] CALLER_LINE_NAME = buildName(EXTENSIONS_NAME, asChars("CallerLine")); //$NON-NLS-1$
+	public static final char[][] CALLER_CLASS_NAME = buildName(EXTENSIONS_NAME, asChars("CallerClass")); //$NON-NLS-1$
+	public static final char[][] CALLER_METHOD_NAME = buildName(EXTENSIONS_NAME, asChars("CallerMethod")); //$NON-NLS-1$
+	public static final char[][] ARG_NAME_NAME = buildName(EXTENSIONS_NAME, asChars("ArgName")); //$NON-NLS-1$
+	public static final char[][] ARG_NAMES_NAME = buildName(EXTENSIONS_NAME, asChars("ArgNames")); //$NON-NLS-1$		
+	public static final char[][][] SYNTHETIC_NAMES = {CALLER_FILE_NAME, CALLER_LINE_NAME, CALLER_CLASS_NAME, CALLER_METHOD_NAME,
+			ARG_NAME_NAME, ARG_NAMES_NAME };
 	public static final char[] VALUE_NAME = asChars("value"); //$NON-NLS-1$
 	
 	public static boolean isSyntheticParameterAnnotation(AnnotationBinding annotation) {
@@ -667,32 +529,36 @@ public class CompilerExtensions {
 		return false;
 	}
 	
-	public static boolean isCallIfAnnotation(AnnotationBinding annotation) {
-		return matches(CALL_IF_NAME, annotation.getAnnotationType().compoundName);
+	public static boolean isConditionalAnnotation(AnnotationBinding annotation) {
+		return matches(CONDITIONAL_NAME, annotation.getAnnotationType().compoundName);
+	}
+	
+	public static boolean isOptionalAnnotation(AnnotationBinding annotation) {
+		return matches(OPTIONAL_NAME, annotation.getAnnotationType().compoundName);
 	}
 	
 	public static boolean isCallFileAnnotation(AnnotationBinding annotation) {
-		return matches(CALL_FILE_NAME, annotation.getAnnotationType().compoundName);
+		return matches(CALLER_FILE_NAME, annotation.getAnnotationType().compoundName);
 	}
 	
 	public static boolean isCallLineAnnotation(AnnotationBinding annotation) {
-		return matches(CALL_LINE_NAME, annotation.getAnnotationType().compoundName);
+		return matches(CALLER_LINE_NAME, annotation.getAnnotationType().compoundName);
 	}
 	
 	public static boolean isCallClassAnnotation(AnnotationBinding annotation) {
-		return matches(CALL_CLASS_NAME, annotation.getAnnotationType().compoundName);
+		return matches(CALLER_CLASS_NAME, annotation.getAnnotationType().compoundName);
 	}
 	
 	public static boolean isCallMethodAnnotation(AnnotationBinding annotation) {
-		return matches(CALL_METHOD_NAME, annotation.getAnnotationType().compoundName);
+		return matches(CALLER_METHOD_NAME, annotation.getAnnotationType().compoundName);
 	}
 	
-	public static boolean isCallNameAnnotation(AnnotationBinding annotation) {
-		return matches(CALL_NAME_NAME, annotation.getAnnotationType().compoundName);
+	public static boolean isArgNameAnnotation(AnnotationBinding annotation) {
+		return matches(ARG_NAME_NAME, annotation.getAnnotationType().compoundName);
 	}
 	
-	public static boolean isCallNamesAnnotation(AnnotationBinding annotation) {
-		return matches(CALL_NAMES_NAME, annotation.getAnnotationType().compoundName);
+	public static boolean isArgNamesAnnotation(AnnotationBinding annotation) {
+		return matches(ARG_NAMES_NAME, annotation.getAnnotationType().compoundName);
 	}
 	
 	public static char[] extractChars(char[] source, int start, int end) {
@@ -750,6 +616,48 @@ public class CompilerExtensions {
 		return result;
 	}
 	
+	// lazily counts and stores optional annotations for method parameters
+	public static void initOptionalParameterAnnotations(MethodBinding method) {
+		method = method.original();
+		if (method.numOptionalAnnotations >= 0) return; // already done
+		method.numOptionalAnnotations = 0;
+		AnnotationBinding[][] parameterAnnotations = method.getParameterAnnotations();
+		if (parameterAnnotations == null) return;
+		method.optionalAnnotations = new AnnotationBinding[parameterAnnotations.length];
+		for (int i = parameterAnnotations.length - 1; i >= 0; i--) { // start from the end
+			AnnotationBinding[] annotations = parameterAnnotations[i];
+			AnnotationBinding annotation = null;
+			for (int j = 0; j < annotations.length; j++) {
+				if (isOptionalAnnotation(annotations[j])) {
+					annotation = annotations[j];
+					break;
+				}
+			}
+			if (annotation == null) break; // ignore further annotations
+			method.numOptionalAnnotations += 1;
+			method.optionalAnnotations[i] = annotation;
+		}
+	}
+	
+	// adds any missing optional argument types (for compatibility checks)
+	public static TypeBinding[] handleOptionalParametersForCompatibility(MethodBinding method, TypeBinding[] arguments) {
+		method = method.original();
+		if (arguments == null) arguments = new TypeBinding[0];
+		TypeBinding[] parameters = method.parameters;
+		if (parameters == null) return arguments;
+		initOptionalParameterAnnotations(method);		
+		int numOptionalAnnotations = method.numOptionalAnnotations;
+		if (numOptionalAnnotations == 0) return arguments;
+		int numMissingArguments = parameters.length - arguments.length;
+		if ((numMissingArguments <= 0) || (numMissingArguments > numOptionalAnnotations)) return arguments;
+		ExtensionsConfig.log("handleOptionalParametersForCompatibility: method: " + asString(method.selector) + ": adding " +  //$NON-NLS-1$//$NON-NLS-2$
+				numMissingArguments + " missing optional arguments"); //$NON-NLS-1$ 
+		TypeBinding[] result = new TypeBinding[parameters.length];
+		System.arraycopy(arguments, 0, result, 0, arguments.length);
+		System.arraycopy(parameters, arguments.length, result, arguments.length, numMissingArguments);
+		return result;
+	}
+	
 	public static char[] handleSyntheticParametersForSignature(MethodBinding method, char[] methodSignature) {
 		method = method.original();
 		initSyntheticParameterAnnotations(method);
@@ -767,6 +675,52 @@ public class CompilerExtensions {
 		ExtensionsConfig.log("handleSyntheticParametersForSignature: old signature: " + asString(methodSignature) + //$NON-NLS-1$
 				", new signature: " + asString(newMethodSignature)); //$NON-NLS-1$
 		return newMethodSignature;
+	}
+	
+	public static class ParameterNames {
+		public char[][] parameterPackageNames;
+		public char[][] parameterTypeNames;
+		public char[][] parameterNames;
+		
+		public ParameterNames(char[][] parameterPackageNames, char[][] parameterTypeNames, char[][] parameterNames) {
+			this.parameterPackageNames = parameterPackageNames;
+			this.parameterTypeNames = parameterTypeNames;
+			this.parameterNames = parameterNames;
+		}
+	}
+	
+	public static void handleSyntheticParametersForCompletion(MethodBinding method, ParameterNames names, int initialLength) {
+		initSyntheticParameterAnnotations(method);		
+		int numSyntheticAnnotations = method.numSyntheticAnnotations;
+		if (numSyntheticAnnotations == 0) return;
+		int newLength = initialLength - numSyntheticAnnotations;
+		char[][] newParameterPackageNames = new char[newLength][];
+		char[][] newParameterTypeNames = new char[newLength][];
+		char[][] newParameterNames = new char[newLength][];
+		for (int i = 0, j = 0; i < initialLength; i++) {
+			if (method.syntheticAnnotations[i] == null) {
+				newParameterPackageNames[j] = names.parameterPackageNames[i];
+				newParameterTypeNames[j] = names.parameterTypeNames[i];
+				newParameterNames[j++] = names.parameterNames[i];
+			}
+		}
+		names.parameterPackageNames = newParameterPackageNames;
+		names.parameterTypeNames = newParameterTypeNames;
+		names.parameterNames = newParameterNames;
+	}
+	
+	public static boolean handleOptionalParametersForCompletion(MethodBinding method) {		
+		CompilerExtensions.initOptionalParameterAnnotations(method);
+		if (method.numOptionalAnnotations == 0) return false;
+		if (method.savedParameters == null) method.savedParameters = method.parameters;
+		if ((method.parameters.length > 0) &&
+				(method.optionalAnnotations[method.parameters.length - 1] != null)) {
+			method.parameters = Arrays.copyOf(method.parameters, method.parameters.length - 1);
+			return true;
+		}
+		method.parameters = method.savedParameters;
+		method.savedParameters = null;
+		return false;
 	}
 	
 	public static final char[] ZeroChars = {'0'};
@@ -787,7 +741,7 @@ public class CompilerExtensions {
 		return new NullLiteral(s, e);
 	}
 	
-	public static Expression makeCallFile(Invocation invocation, Scope scope) {
+	public static Expression makeCallerFile(Invocation invocation, Scope scope) {
 		int position = invocation.sourceEnd();
 		ClassScope classScope = scope.classScope();
 		if (classScope == null) return new NullLiteral(position, position);
@@ -796,7 +750,7 @@ public class CompilerExtensions {
 		return new StringLiteral(compilationUnit.getFileName(), position, position, 0);
 	}
 	
-	public static Expression makeCallLineExpression(Invocation invocation, Scope scope) {
+	public static Expression makeCallerLineExpression(Invocation invocation, Scope scope) {
 		int position = invocation.sourceEnd();
 		ClassScope classScope = scope.classScope();
 		if (classScope == null) return new NullLiteral(position, position);
@@ -807,7 +761,7 @@ public class CompilerExtensions {
 		return IntLiteral.buildIntLiteral(asChars(Integer.toString(lineNumber)), position, position);
 	}
 	
-	public static Expression makeCallClassExpression(Invocation invocation, Scope scope) {
+	public static Expression makeCallerClassExpression(Invocation invocation, Scope scope) {
 		int position = invocation.sourceEnd();
 		ClassScope classScope = scope.classScope();
 		if (classScope == null) return new NullLiteral(position, position);
@@ -816,7 +770,7 @@ public class CompilerExtensions {
 		return new StringLiteral(classScope.referenceContext.name, position, position, 0);
 	}
 	
-	public static Expression makeCallMethodExpression(Invocation invocation, Scope scope) {
+	public static Expression makeCallerMethodExpression(Invocation invocation, Scope scope) {
 		int position = invocation.sourceEnd();
 		ClassScope classScope = scope.classScope();
 		if (classScope == null) return new NullLiteral(position, position);
@@ -829,7 +783,7 @@ public class CompilerExtensions {
 		return new StringLiteral(declaration.selector, position, position, 0);
 	}
 	
-	public static Expression findCallNameExpression(Expression expression, Scope scope) {
+	public static Expression findArgNameExpression(Expression expression, Scope scope) {
 		if (expression instanceof SingleNameReference) {
 			return expression;
 		} else if (expression instanceof QualifiedNameReference) {
@@ -841,14 +795,14 @@ public class CompilerExtensions {
 			Expression[] arguments = invocation.arguments();
 			if (arguments == null) return null;
 			for (Expression argument: arguments) {
-				Expression foundExpression = findCallNameExpression(argument, scope);
+				Expression foundExpression = findArgNameExpression(argument, scope);
 				if (foundExpression != null) return foundExpression;
 			}
 		}
 		return null;
 	}
 	
-	public static Expression makeCallNameExpression(Invocation invocation, Scope scope, int index) {
+	public static Expression makeArgNameExpression(Invocation invocation, Scope scope, int index) {
 		int position = invocation.sourceEnd();
 		ClassScope classScope = scope.classScope();
 		if (classScope == null) return new NullLiteral(position, position);
@@ -859,14 +813,14 @@ public class CompilerExtensions {
 		if ((index < 0) || (index >= arguments.length)) return new NullLiteral(position, position);
 		Expression argument = arguments[index];
 		if (argument == null) return new NullLiteral(position, position);
-		Expression foundArgument = findCallNameExpression(argument, scope);
+		Expression foundArgument = findArgNameExpression(argument, scope);
 		if (foundArgument == null) foundArgument = argument;
 		char[] contents = compilationUnit.compilationResult().compilationUnit.getContents();
 		char[] argumentChars = extractChars(contents, foundArgument.sourceStart, foundArgument.sourceEnd);
 		return new StringLiteral(argumentChars, position, position, 0);		
 	}
 	
-	public static Expression makeCallNamesExpression(Invocation invocation, Scope scope, int index) {
+	public static Expression makeArgNamesExpression(Invocation invocation, Scope scope, int index) {
 		int position = invocation.sourceEnd();
 		ClassScope classScope = scope.classScope();
 		if (classScope == null) return new NullLiteral(position, position);
@@ -883,7 +837,7 @@ public class CompilerExtensions {
 			result.initializer.expressions = new Expression[arguments.length - index];
 			for (int i = index; i < arguments.length; i++) {
 				Expression argument = arguments[i];
-				Expression foundArgument = findCallNameExpression(argument, scope);
+				Expression foundArgument = findArgNameExpression(argument, scope);
 				if (foundArgument == null) foundArgument = argument;
 				char[] contents = compilationUnit.compilationResult().compilationUnit.getContents();
 				char[] argumentChars = extractChars(contents, foundArgument.sourceStart, foundArgument.sourceEnd);
@@ -966,17 +920,17 @@ public class CompilerExtensions {
 			} else {
  				AnnotationBinding annotation = syntheticAnnotations[i];
 				if (isCallFileAnnotation(annotation)) {
-					newArguments[i] = makeCallFile(invocation, scope);
+					newArguments[i] = makeCallerFile(invocation, scope);
 				} else if (isCallLineAnnotation(annotation)) {
-					newArguments[i] = makeCallLineExpression(invocation, scope);
+					newArguments[i] = makeCallerLineExpression(invocation, scope);
 				} else if (isCallClassAnnotation(annotation)) {
-					newArguments[i] = makeCallClassExpression(invocation, scope);
+					newArguments[i] = makeCallerClassExpression(invocation, scope);
 				} else if (isCallMethodAnnotation(annotation)) {
-					newArguments[i] = makeCallMethodExpression(invocation, scope);
-				} else if (isCallNameAnnotation(annotation)) {
-					newArguments[i] = makeCallNameExpression(invocation, scope, j);
-				} else if (isCallNamesAnnotation(annotation)) {
-					newArguments[i] = makeCallNamesExpression(invocation, scope, j);
+					newArguments[i] = makeCallerMethodExpression(invocation, scope);
+				} else if (isArgNameAnnotation(annotation)) {
+					newArguments[i] = makeArgNameExpression(invocation, scope, j);
+				} else if (isArgNamesAnnotation(annotation)) {
+					newArguments[i] = makeArgNamesExpression(invocation, scope, j);
 				} else {
 					newArguments[i] = makeDefaultLiteral(method.parameters[i], invocation.sourceEnd(), invocation.sourceEnd());
 				}
@@ -1017,9 +971,10 @@ public class CompilerExtensions {
 	}
 	
 	public static void checkSyntheticAnnotations(AbstractMethodDeclaration declaration, Scope scope) {
-		if (declaration.arguments == null) return;
-		for (int i = 0; i < declaration.arguments.length; i++) {
-			Argument argument = declaration.arguments[i];
+		Argument[] arguments = declaration.arguments;
+		if (arguments == null) return;
+		for (int i = 0; i < arguments.length; i++) {
+			Argument argument = arguments[i];
 			if ((argument.annotations == null) || (argument.type == null)) continue;
 			TypeBinding argumentType = argument.type.resolvedType;
 			if (argumentType == null) continue;
@@ -1028,7 +983,7 @@ public class CompilerExtensions {
 				AnnotationBinding annotationType = annotation.getCompilerAnnotation();
 				if (annotationType == null) continue;
 				if (isCallFileAnnotation(annotationType) || isCallClassAnnotation(annotationType) || isCallMethodAnnotation(annotationType)
-						|| isCallNameAnnotation(annotationType)) {
+						|| isArgNameAnnotation(annotationType)) {
 					TypeBinding stringBinding = scope.getJavaLangString();
 					if (!stringBinding.isCompatibleWith(argumentType)) {
 						addProblem(scope, argument.type.sourceStart, argument.type.sourceEnd,
@@ -1040,7 +995,7 @@ public class CompilerExtensions {
 						addProblem(scope, argument.type.sourceStart, argument.type.sourceEnd,
 								"int expected", true); //$NON-NLS-1$
 					}
-				} else if (isCallNamesAnnotation(annotationType)) {
+				} else if (isArgNamesAnnotation(annotationType)) {
 					TypeBinding stringBinding = scope.getJavaLangString();
 					TypeBinding arrayBinding = scope.createArrayType(stringBinding, 1);
 					if (!arrayBinding.isCompatibleWith(argumentType)) {
@@ -1052,11 +1007,97 @@ public class CompilerExtensions {
 		}
 	}
 	
+	// adds non-provided optional arguments required to invoke the method
+	public static void handleOptionalArgumentsForInvocation(Invocation invocation, InvocationArguments invocationArguments, MethodBinding method, Scope scope) {
+		method = method.original();
+		if (!method.isValidBinding()) return;
+		TypeBinding[] parameters = method.parameters;
+		Expression[] oldArguments = invocationArguments.arguments;
+		if (oldArguments == null) oldArguments = new Expression[0];
+		TypeBinding[] oldArgumentTypes = invocationArguments.argumentTypes;
+		if (oldArgumentTypes == null) oldArgumentTypes = new TypeBinding[0];
+		initOptionalParameterAnnotations(method);
+		if ((parameters == null) || (oldArguments.length >= parameters.length)) return; // already have enough arguments
+		int numMissingArguments = parameters.length - oldArguments.length;
+		if (numMissingArguments > method.numOptionalAnnotations) return; // should not happen after compatibility checks
+		ExtensionsConfig.log("handleOptionalArgumentsForInvocation: method: " + asString(method.selector) + ": adding " + //$NON-NLS-1$ //$NON-NLS-2$
+				numMissingArguments + " missing optional arguments"); //$NON-NLS-1$ 
+		Expression[] newArguments = new Expression[parameters.length];
+		System.arraycopy(oldArguments, 0, newArguments, 0, oldArguments.length);
+		TypeBinding[] newArgumentTypes = new TypeBinding[parameters.length];
+		System.arraycopy(oldArgumentTypes, 0, newArgumentTypes, 0, oldArgumentTypes.length);
+		for (int i = oldArguments.length; i < parameters.length; i++) {
+			AnnotationBinding annotation = method.optionalAnnotations[i];
+			if (annotation == null) return; // should not happen after compatibility checks
+			newArguments[i] = makeDefaultLiteral(method.parameters[i], invocation.sourceEnd(), invocation.sourceEnd());
+			newArgumentTypes[i] = resolveType(newArguments[i], scope);
+			if (newArgumentTypes[i] == null) return; // cannot resolve a basic literal??
+		}
+		invocationArguments.arguments = newArguments;
+		invocationArguments.argumentTypes = newArgumentTypes;
+	}	
+	
+	// adds synthetic arguments required to invoke the method
+	public static void handleOptionalArgumentsForMessageSend(MessageSend invocation, Scope scope) {
+		InvocationArguments invocationArguments = new InvocationArguments(invocation.arguments, invocation.argumentTypes);
+		handleOptionalArgumentsForInvocation(invocation, invocationArguments, invocation.binding, scope);		
+		invocation.arguments = invocationArguments.arguments;
+		invocation.argumentTypes = invocationArguments.argumentTypes;		
+	}
+	
+	// adds synthetic arguments required to invoke the method
+	public static void handleOptionalArgumentsForAllocation(AllocationExpression invocation, Scope scope) {
+		InvocationArguments invocationArguments = new InvocationArguments(invocation.arguments, invocation.argumentTypes);
+		handleOptionalArgumentsForInvocation(invocation, invocationArguments, invocation.binding, scope);		
+		invocation.arguments = invocationArguments.arguments;
+		invocation.argumentTypes = invocationArguments.argumentTypes;
+	}
+	
+	// adds synthetic arguments required to invoke the method
+	public static TypeBinding[] handleOptionalArgumentsForConstructorCall(ExplicitConstructorCall invocation, Scope scope, TypeBinding[] argumentTypes) {
+		InvocationArguments invocationArguments = new InvocationArguments(invocation.arguments, argumentTypes);
+		handleOptionalArgumentsForInvocation(invocation, invocationArguments, invocation.binding, scope);			
+		invocation.arguments = invocationArguments.arguments;
+		return invocationArguments.argumentTypes;
+	}
+	
+	public static void checkOptionalAnnotations(AbstractMethodDeclaration declaration, Scope scope) {
+		Argument[] arguments = declaration.arguments;
+		if (arguments == null) return;
+		boolean optionalAllowed = true;
+		for (int i = arguments.length - 1; i >= 0; i--) {
+			Argument argument = arguments[i];
+			if (argument.annotations == null) {
+				optionalAllowed = false;
+				continue;
+			}
+			Annotation optionalAnnotation = null;
+			for (int j = 0; j < argument.annotations.length; j++) {
+				Annotation annotation = argument.annotations[j];
+				AnnotationBinding annotationType = annotation.getCompilerAnnotation();
+				if (annotationType == null) continue;
+				if (isOptionalAnnotation(annotationType)) {
+					optionalAnnotation = annotation;
+					break;
+				}
+			}
+			if (optionalAnnotation != null) {
+				if (!optionalAllowed) {
+					addProblem(scope, optionalAnnotation.sourceStart, optionalAnnotation.sourceEnd,
+							"Optional arguments must appear last", true); //$NON-NLS-1$
+					return;
+				}
+			} else {
+				optionalAllowed = false;
+			}
+		}
+	}
+	
 	public static boolean isMessageSendDisabled(MethodBinding method) {
 		AnnotationBinding[] annotations = method.getAnnotations();
 		if (annotations == null) return false;
 		for (AnnotationBinding annotation: annotations) {
-			if (isCallIfAnnotation(annotation)) {
+			if (isConditionalAnnotation(annotation)) {
 				boolean enabled = getBooleanAnnotationParam(annotation, VALUE_NAME);
 				return !enabled;
 			}

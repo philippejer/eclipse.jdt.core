@@ -70,8 +70,13 @@ public class MethodBinding extends Binding {
 	/** Store parameter names from MethodParameters attribute (incl. applicable default). */
 	public char[][] parameterNames = Binding.NO_PARAMETER_NAMES;
 	
+	public AnnotationBinding[] optionalAnnotations = null;
+	public int numOptionalAnnotations = -1;
+	
 	public AnnotationBinding[] syntheticAnnotations = null;
 	public int numSyntheticAnnotations = -1;
+	
+	public TypeBinding[] savedParameters = null;
 
 protected MethodBinding() {
 	// for creating problem or synthetic method
