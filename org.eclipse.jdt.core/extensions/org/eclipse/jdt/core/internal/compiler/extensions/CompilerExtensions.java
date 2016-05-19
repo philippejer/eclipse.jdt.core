@@ -47,6 +47,7 @@ import org.eclipse.jdt.internal.compiler.ast.Wildcard;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants;
 import org.eclipse.jdt.internal.compiler.impl.BooleanConstant;
 import org.eclipse.jdt.internal.compiler.impl.CompilerOptions;
+import org.eclipse.jdt.internal.compiler.impl.Constant;
 import org.eclipse.jdt.internal.compiler.impl.IntConstant;
 import org.eclipse.jdt.internal.compiler.impl.ReferenceContext;
 import org.eclipse.jdt.internal.compiler.impl.StringConstant;
@@ -58,11 +59,13 @@ import org.eclipse.jdt.internal.compiler.lookup.CaptureBinding;
 import org.eclipse.jdt.internal.compiler.lookup.ClassScope;
 import org.eclipse.jdt.internal.compiler.lookup.CompilationUnitScope;
 import org.eclipse.jdt.internal.compiler.lookup.ElementValuePair;
+import org.eclipse.jdt.internal.compiler.lookup.FieldBinding;
 import org.eclipse.jdt.internal.compiler.lookup.MethodBinding;
 import org.eclipse.jdt.internal.compiler.lookup.MethodScope;
 import org.eclipse.jdt.internal.compiler.lookup.ParameterizedTypeBinding;
 import org.eclipse.jdt.internal.compiler.lookup.ReferenceBinding;
 import org.eclipse.jdt.internal.compiler.lookup.Scope;
+import org.eclipse.jdt.internal.compiler.lookup.SourceTypeBinding;
 import org.eclipse.jdt.internal.compiler.lookup.TypeBinding;
 import org.eclipse.jdt.internal.compiler.lookup.TypeConstants;
 import org.eclipse.jdt.internal.compiler.lookup.TypeIds;
@@ -509,6 +512,7 @@ public class CompilerExtensions {
 	
 	public static final char[][] EXTENSIONS_NAME = asChars("org", "eclipse", "jdt", "annotation", "extensions"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
 	public static final char[][] CONDITIONAL_NAME = buildName(EXTENSIONS_NAME, asChars("Conditional")); //$NON-NLS-1$
+	public static final char[][] CONDITIONAL_CALLER_FIELD_NAME = buildName(EXTENSIONS_NAME, asChars("ConditionalCallerField")); //$NON-NLS-1$
 	public static final char[][] OPTIONAL_NAME = buildName(EXTENSIONS_NAME, asChars("Optional")); //$NON-NLS-1$
 	public static final char[][] CALLER_FILE_NAME = buildName(EXTENSIONS_NAME, asChars("CallerFile")); //$NON-NLS-1$
 	public static final char[][] CALLER_LINE_NAME = buildName(EXTENSIONS_NAME, asChars("CallerLine")); //$NON-NLS-1$
@@ -531,6 +535,10 @@ public class CompilerExtensions {
 	
 	public static boolean isConditionalAnnotation(AnnotationBinding annotation) {
 		return matches(CONDITIONAL_NAME, annotation.getAnnotationType().compoundName);
+	}
+	
+	public static boolean isConditionalCallerFieldAnnotation(AnnotationBinding annotation) {
+		return matches(CONDITIONAL_CALLER_FIELD_NAME, annotation.getAnnotationType().compoundName);
 	}
 	
 	public static boolean isOptionalAnnotation(AnnotationBinding annotation) {
@@ -1093,15 +1101,37 @@ public class CompilerExtensions {
 		}
 	}
 	
-	public static boolean isMessageSendDisabled(MethodBinding method) {
-		AnnotationBinding[] annotations = method.getAnnotations();
-		if (annotations == null) return false;
-		for (AnnotationBinding annotation: annotations) {
-			if (isConditionalAnnotation(annotation)) {
-				boolean enabled = getBooleanAnnotationParam(annotation, VALUE_NAME);
-				return !enabled;
-			}
+	public static boolean checkConditionalCallerFieldAnnotation(AnnotationBinding annotation, BlockScope scope) {
+		String value = getStringAnnotationParam(annotation, VALUE_NAME);
+		if (value == null) return false;
+		char[] name = asChars(value);
+		SourceTypeBinding callerType = scope.enclosingSourceType();
+		if (callerType == null) return false;
+		FieldBinding[] fields = callerType.fields();
+		if (fields == null) return false;
+		for (FieldBinding field: fields) {
+			Constant constant = field.constant();
+			if (!(constant instanceof BooleanConstant)) return false;
+			if (!matches(field.name, name)) return false;
+			return ((BooleanConstant) constant).booleanValue();
 		}
 		return false;
+	}
+	
+	public static boolean isMessageSendEnabled(MethodBinding method, BlockScope scope) {
+		AnnotationBinding[] annotations = method.getAnnotations();
+		if (annotations == null) return true;
+		boolean enabled = true;
+		for (AnnotationBinding annotation: annotations) {
+			if (isConditionalAnnotation(annotation)) {
+				enabled = getBooleanAnnotationParam(annotation, VALUE_NAME);
+				if (enabled) return true;
+				// else check for other conditional annotations that might allow this call
+			} else if (isConditionalCallerFieldAnnotation(annotation)) {
+				enabled = checkConditionalCallerFieldAnnotation(annotation, scope);
+				if (enabled) return true;
+			}
+		}
+		return enabled;
 	}
 }
