@@ -328,8 +328,8 @@ protected void consumeFieldAccess(boolean isSuperAccess) {
 	}
 }
 
-protected void consumeFormalParameter(boolean isVarArgs, boolean isDefault) {
-	super.consumeFormalParameter(isVarArgs, isDefault);
+protected void consumeFormalParameter(boolean isVarArgs) {
+	super.consumeFormalParameter(isVarArgs);
 	this.patternLocator.match((LocalDeclaration) this.astStack[this.astPtr], this.nodeSet);
 }
 

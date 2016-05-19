@@ -432,6 +432,7 @@ public class ExplicitConstructorCall extends Statement implements Invocation {
 	
 			if (ExtensionsConfig.Enable) {
 				argumentTypes = CompilerExtensions.handleSyntheticArgumentsForConstructorCall(this, scope, argumentTypes);		
+				argumentTypes = CompilerExtensions.handleOptionalArgumentsForConstructorCall(this, scope, argumentTypes);		
 			}
 
 			if (this.binding.isValidBinding()) {

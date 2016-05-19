@@ -2670,24 +2670,18 @@ protected void consumeForceNoDiet() {
 		pushOnElementStack(K_LOCAL_INITIALIZER_DELIMITER);
 	}
 }
-protected void consumeFormalParameter(boolean isVarArgs, boolean isDefault) {
+protected void consumeFormalParameter(boolean isVarArgs) {
 	
 	this.invocationType = NO_RECEIVER;
 	this.qualifier = -1;
 	
 	if (this.indexOfAssistIdentifier() < 0) {
-		super.consumeFormalParameter(isVarArgs, isDefault);
+		super.consumeFormalParameter(isVarArgs);
 		if (this.pendingAnnotation != null) {
 			this.pendingAnnotation.potentialAnnotatedNode = this.astStack[this.astPtr];
 			this.pendingAnnotation = null;
 		}
 	} else {
-		Expression defaultExpression = null;
-		if (isDefault) {		
-			this.intPtr--; // assignment operator position	
-			this.expressionLengthPtr--;
-			defaultExpression = this.expressionStack[this.expressionPtr--];
-		}
 		boolean isReceiver = this.intStack[this.intPtr--] == 0;
 	    if (isReceiver) {
 	    	this.expressionPtr--;
@@ -2751,7 +2745,6 @@ protected void consumeFormalParameter(boolean isVarArgs, boolean isDefault) {
 		}
 
 		arg.isCatchArgument = topKnownElementKind(COMPLETION_OR_ASSIST_PARSER) == K_BETWEEN_CATCH_AND_RIGHT_PAREN;
-		arg.defaultExpression = defaultExpression;
 		pushOnAstStack(arg);
 
 		this.assistNode = arg;

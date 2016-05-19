@@ -639,9 +639,9 @@ protected void consumeFieldAccess(boolean isSuperAccess) {
 	}
 	this.isOrphanCompletionNode = true;
 }
-protected void consumeFormalParameter(boolean isVarArgs, boolean isDefault) {
+protected void consumeFormalParameter(boolean isVarArgs) {
 	if (this.indexOfAssistIdentifier() < 0) {
-		super.consumeFormalParameter(isVarArgs, isDefault);
+		super.consumeFormalParameter(isVarArgs);
 		if((!this.diet || this.dietInt != 0) && this.astPtr > -1) {
 			Argument argument = (Argument) this.astStack[this.astPtr];
 			if(argument.type == this.assistNode) {
@@ -651,12 +651,6 @@ protected void consumeFormalParameter(boolean isVarArgs, boolean isDefault) {
 			}
 		}
 	} else {
-		Expression defaultExpression = null;
-		if (isDefault) {		
-			this.intPtr--; // assignment operator position	
-			this.expressionLengthPtr--;
-			defaultExpression = this.expressionStack[this.expressionPtr--];
-		}
 		boolean isReceiver = this.intStack[this.intPtr--] == 0;
 	    if (isReceiver) {
 	    	this.expressionPtr--;
@@ -722,7 +716,6 @@ protected void consumeFormalParameter(boolean isVarArgs, boolean isDefault) {
 				currentRecoveryType.annotationsConsumed(arg.annotations);
 		}
 
-		arg.defaultExpression = defaultExpression;
 		pushOnAstStack(arg);
 
 		this.assistNode = arg;

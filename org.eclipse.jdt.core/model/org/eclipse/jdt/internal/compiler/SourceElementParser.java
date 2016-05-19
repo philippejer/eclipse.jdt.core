@@ -385,8 +385,8 @@ protected void consumeFieldAccess(boolean isSuperAccess) {
 		this.requestor.acceptFieldReference(fr.token, fr.sourceStart);
 	}
 }
-protected void consumeFormalParameter(boolean isVarArgs, boolean isDefault) {
-	super.consumeFormalParameter(isVarArgs, isDefault);
+protected void consumeFormalParameter(boolean isVarArgs) {
+	super.consumeFormalParameter(isVarArgs);
 
 	// Flush comments prior to this formal parameter so the declarationSourceStart of the following parameter
 	// is correctly set (see bug 80904)

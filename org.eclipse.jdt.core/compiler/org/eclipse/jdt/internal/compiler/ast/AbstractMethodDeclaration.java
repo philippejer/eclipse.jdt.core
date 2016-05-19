@@ -558,6 +558,7 @@ public abstract class AbstractMethodDeclaration
 		
 		if (ExtensionsConfig.Enable) {
 			CompilerExtensions.checkSyntheticAnnotations(this, scope);
+			CompilerExtensions.checkOptionalAnnotations(this, scope);
 		}
 	}
 

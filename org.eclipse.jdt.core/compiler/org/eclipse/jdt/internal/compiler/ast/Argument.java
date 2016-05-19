@@ -31,8 +31,6 @@ public class Argument extends LocalDeclaration {
 
 	// prefix for setter method (to recognize special hiding argument)
 	private final static char[] SET = "set".toCharArray(); //$NON-NLS-1$
-	
-	public Expression defaultExpression;
 
 	public Argument(char[] name, long posNom, TypeReference tr, int modifiers) {
 
