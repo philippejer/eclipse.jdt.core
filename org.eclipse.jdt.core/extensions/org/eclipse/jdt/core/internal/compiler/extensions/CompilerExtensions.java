@@ -841,9 +841,11 @@ public class CompilerExtensions {
 			Invocation invocation = (Invocation) expression;
 			Expression[] arguments = invocation.arguments();
 			if (arguments == null) return null;
+			Expression nameExpression = null;
 			for (Expression argument: arguments) {
 				Expression foundExpression = findArgNameExpression(argument, scope);
-				if (foundExpression != null) return foundExpression;
+				if (nameExpression != null) return null; // two or more valid names in the arguments
+				nameExpression = foundExpression;
 			}
 		}
 		return null;
@@ -1150,8 +1152,8 @@ public class CompilerExtensions {
 		if (fields == null) return false;
 		for (FieldBinding field: fields) {
 			Constant constant = field.constant();
-			if (!(constant instanceof BooleanConstant)) return false;
-			if (!matches(field.name, name)) return false;
+			if (!(constant instanceof BooleanConstant)) continue;
+			if (!matches(field.name, name)) continue;
 			return ((BooleanConstant) constant).booleanValue();
 		}
 		return false;
@@ -1169,6 +1171,7 @@ public class CompilerExtensions {
 			} else if (isConditionalCallerFieldAnnotation(annotation)) {
 				enabled = checkConditionalCallerFieldAnnotation(annotation, scope);
 				if (enabled) return true;
+				// else check for other conditional annotations that might allow this call
 			}
 		}
 		return enabled;
