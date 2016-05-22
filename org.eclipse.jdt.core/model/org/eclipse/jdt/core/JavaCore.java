@@ -2999,6 +2999,13 @@ public final class JavaCore extends Plugin {
 	 * @since 3.11
 	 */
 	public static final String JAVA_FORMATTER_EXTENSION_POINT_ID = "javaFormatter" ;  //$NON-NLS-1$
+	
+	/**
+	 * Configurable option value: {@value}.
+	 * @since XXX
+	 * @category OptionValue
+	 */
+	public static final String COMPILER_EXTENSIONS_PUBLIC_BY_DEFAULT = PLUGIN_ID + ".compiler.extensions.publicByDefault"; //$NON-NLS-1$
 
 	/**
 	 * Creates the Java core plug-in.
