@@ -12115,38 +12115,29 @@ public final class CompletionEngine
 
 			if (importBinding instanceof PackageBinding) {
 				if (ExtensionsConfig.Enable && onDemand) {
-					char[] importName = CompilerExtensions.buildPackageName(((PackageBinding) importBinding).compoundName);
-					String[] packageReferences = CompilerExtensions.getPackageTypesFromCache(this.unitScope, importName);
+					char[] packageName = CompilerExtensions.buildPackageName(((PackageBinding) importBinding).compoundName);
+					String[] packageReferences = CompilerExtensions.getPackageTypesFromCache(this.unitScope, packageName);
 					if (packageReferences == null) {
-						this.knownPkgs.put(importName, this);				
-						this.nameEnvironment.findPackages(CompilerExtensions.finishPackageName(importName), this);
-						char[][] packageKeys = this.knownPkgs.keyTable;
-						for (int j = 0; j < packageKeys.length; j++) {
-							if (packageKeys[j] == null) continue;
-							char[] packageName = packageKeys[j];
-							this.foundTypesCount = 0;
-							this.nameEnvironment.findTypes(
-									CompilerExtensions.finishPackageName(packageName),
-									false,
-									this.options.camelCaseMatch,
-									IJavaSearchConstants.TYPE | IJavaSearchConstants.PACKAGE,
-									this,
-									this.monitor);
-							String[] references = new String[this.acceptedTypes.size];
-							for (int k = 0; k < this.acceptedTypes.size; k++) {
-								AcceptedType type = (AcceptedType) this.acceptedTypes.elementAt(k);
-								if ((type.packageName == null) || (type.simpleTypeName == null)) continue;
-								char[] reference = CompilerExtensions.buildPackageType(type.packageName, type.simpleTypeName);
-								references[k] = new String(reference);
-								ExtensionsConfig.log("getFavoriteReferenceBindings: '" + CompilerExtensions.asString(packageName) + "' -> '" + CompilerExtensions.asString(reference) + "'"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-							}
-							packageReferences = CompilerExtensions.concatStringArrays(packageReferences, references);
-							this.acceptedTypes = null;
+						this.foundTypesCount = 0;
+						this.nameEnvironment.findTypes(
+								CompilerExtensions.finishPackageName(packageName),
+								false,
+								this.options.camelCaseMatch,
+								IJavaSearchConstants.TYPE | IJavaSearchConstants.PACKAGE,
+								this,
+								this.monitor);
+						packageReferences = new String[this.acceptedTypes.size];
+						for (int j = 0; j < this.acceptedTypes.size; j++) {
+							AcceptedType type = (AcceptedType) this.acceptedTypes.elementAt(j);
+							if ((type.packageName == null) || (type.simpleTypeName == null)) continue;
+							char[] reference = CompilerExtensions.buildPackageType(type.packageName, type.simpleTypeName);
+							packageReferences[j] = new String(reference);
+							ExtensionsConfig.log("getFavoriteReferenceBindings: '" + CompilerExtensions.asString(packageName) + "' -> '" + CompilerExtensions.asString(reference) + "'"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 						}
-						this.knownPkgs.clear();
-						CompilerExtensions.putPackageTypesInCache(this.unitScope, importName, packageReferences);
+						this.acceptedTypes = null;
+						CompilerExtensions.putPackageTypesInCache(this.unitScope, packageName, packageReferences);
 					} else {
-						ExtensionsConfig.log("getFavoriteReferenceBindings: Retrieved '" + CompilerExtensions.asString(importName) + "' references from cache"); //$NON-NLS-1$ //$NON-NLS-2$
+						ExtensionsConfig.log("getFavoriteReferenceBindings: Retrieved '" + CompilerExtensions.asString(packageName) + "' references from cache"); //$NON-NLS-1$ //$NON-NLS-2$
 					}
 					if (packageReferences.length > 0) {
 						favoriteReferences = CompilerExtensions.concatStringArrays(favoriteReferences, packageReferences);
