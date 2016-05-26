@@ -14,6 +14,8 @@
 package org.eclipse.jdt.internal.compiler;
 
 import org.eclipse.jdt.core.compiler.*;
+import org.eclipse.jdt.core.extensions.ExtensionsConfig;
+import org.eclipse.jdt.core.internal.compiler.extensions.CompilerExtensions;
 import org.eclipse.jdt.internal.compiler.env.*;
 import org.eclipse.jdt.internal.compiler.impl.*;
 import org.eclipse.jdt.internal.compiler.ast.*;
@@ -1034,6 +1036,10 @@ public class Compiler implements ITypeRequestor, ProblemSeverities {
 
 				// code generation
 				if (generateCode) unit.generateCode();
+				
+				if (ExtensionsConfig.Enable && generateCode) {
+					CompilerExtensions.handleEndCodeGeneration(unit, sourceUnit, options);
+				}
 
 				// finalize problems (suppressWarnings)
 				unit.finalizeProblems();

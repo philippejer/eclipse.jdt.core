@@ -197,7 +197,7 @@ public FlowInfo analyseCode(BlockScope currentScope, FlowContext flowContext, Fl
 	}
 	public void resolve(BlockScope scope) {
 		if (ExtensionsConfig.Enable) {
-			CompilerExtensions.handleVarResolveLocalDeclaration(this, scope);
+			CompilerExtensions.handleVarForLocalDeclaration(this, scope);
 		}
 		
 		// create a binding and add it to the scope
