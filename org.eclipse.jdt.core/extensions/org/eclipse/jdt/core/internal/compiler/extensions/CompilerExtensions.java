@@ -1,10 +1,15 @@
 package org.eclipse.jdt.core.internal.compiler.extensions;
 
+import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 
+import org.eclipse.core.resources.IFile;
+import org.eclipse.core.resources.IProject;
+import org.eclipse.core.runtime.CoreException;
 import org.eclipse.jdt.core.IAnnotation;
 import org.eclipse.jdt.core.ILocalVariable;
 import org.eclipse.jdt.core.IMethod;
@@ -50,6 +55,7 @@ import org.eclipse.jdt.internal.compiler.ast.TypeDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.TypeReference;
 import org.eclipse.jdt.internal.compiler.ast.Wildcard;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants;
+import org.eclipse.jdt.internal.compiler.env.ICompilationUnit;
 import org.eclipse.jdt.internal.compiler.impl.BooleanConstant;
 import org.eclipse.jdt.internal.compiler.impl.CompilerOptions;
 import org.eclipse.jdt.internal.compiler.impl.Constant;
@@ -78,6 +84,7 @@ import org.eclipse.jdt.internal.compiler.lookup.WildcardBinding;
 import org.eclipse.jdt.internal.compiler.problem.DefaultProblem;
 import org.eclipse.jdt.internal.compiler.problem.ProblemSeverities;
 import org.eclipse.jdt.internal.compiler.util.Util;
+import org.eclipse.jdt.internal.core.CompilationUnit;
 import org.eclipse.jdt.internal.core.SourceMethod;
 
 /**
@@ -379,8 +386,8 @@ public class CompilerExtensions {
 		}
 	}
 	
-	public static void handleVarResolveLocalDeclaration(LocalDeclaration declaration, BlockScope scope) {
-		ExtensionsConfig.log("handleVarResolveLocalDeclaration: declaration: " + ExtensionsConfig.asLog(declaration)); //$NON-NLS-1$
+	public static void handleVarForLocalDeclaration(LocalDeclaration declaration, BlockScope scope) {
+		ExtensionsConfig.log("handleVarForLocalDeclaration: declaration: " + ExtensionsConfig.asLog(declaration)); //$NON-NLS-1$
 		if (isVar(declaration.type)) {
 			try {
 				TypeBinding binding;
@@ -406,8 +413,8 @@ public class CompilerExtensions {
 		}
 	}
 	
-	public static void handleVarResolveForEach(ForeachStatement statement, BlockScope scope) {
-		ExtensionsConfig.log("handleVarResolveForEach: statement: " + ExtensionsConfig.asLog(statement)); //$NON-NLS-1$
+	public static void handleVarForForEach(ForeachStatement statement, BlockScope scope) {
+		ExtensionsConfig.log("handleVarForForEach: statement: " + ExtensionsConfig.asLog(statement)); //$NON-NLS-1$
 		if ((statement.elementVariable != null) && isVar(statement.elementVariable.type)) {
 			try {
 				TypeBinding binding = getForEachComponentType(statement.collection, scope);
@@ -488,6 +495,7 @@ public class CompilerExtensions {
 	}
 	
 	public static void handleEndParse(CompilationUnitDeclaration unit, CompilerOptions options) {
+		ExtensionsConfig.log("handleEndParse: unit: " + ExtensionsConfig.asLog(unit)); //$NON-NLS-1$
 		if (options.publicByDefault) {
 			handlePublicByDefaultForUnit(unit);
 		}
@@ -1161,7 +1169,8 @@ public class CompilerExtensions {
 		return false;
 	}
 	
-	public static boolean isMessageSendEnabled(MethodBinding method, BlockScope scope) {
+	public static boolean handleConditionalAnnotations(MessageSend invocation, BlockScope scope) {
+		MethodBinding method = invocation.binding;
 		AnnotationBinding[] annotations = method.getAnnotations();
 		if (annotations == null) return true;
 		boolean enabled = true;
@@ -1177,5 +1186,303 @@ public class CompilerExtensions {
 			}
 		}
 		return enabled;
+	}
+	
+	public static HashMap<String, ArrayList<SourceEdit>> sourceEdits = new HashMap<>();
+	
+	public static abstract class SourceEdit {
+		
+		public int start, length;
+		
+		public abstract String applyEdit(String source);
+		
+	    protected abstract void mergeChangeEdit(ChangeEdit edit);
+	    protected abstract void mergeMoveEdit(MoveEdit edit);
+
+	    public SourceEdit(int start, int length) {
+	    	this.start = start;
+	    	this.length = length;
+	    }
+
+	    public int end() {
+	        return this.start + this.length;
+	    }
+
+	    public boolean isBefore(SourceEdit edit) {
+	        if (end() <= edit.start) {
+	            return true;
+	        }
+	        return false;
+	    }
+	
+	    public boolean isAfter(SourceEdit edit) {
+	        if (this.start >= edit.end()) {
+	            return true;
+	        }
+	        return false;
+	    }
+	
+	    public boolean intersects(SourceEdit edit) {
+	        if (edit.start < end() && edit.end() > this.start) {
+	            return true;
+	        }
+	        return false;
+	    }
+	
+	    public boolean contains(SourceEdit edit) {
+	        if (this.start <= edit.start && end() >= edit.end()) {
+	            return true;
+	        }
+	        return false;
+	    }
+	
+	    public boolean inside(SourceEdit edit) {
+	        if (edit.start <= this.start && edit.end() >= end()) {
+	            return true;
+	        }
+	        return false;
+	    }
+	
+	    // modifies this edit so that it can be safely applied after the given edit has been applied
+	    public void mergeEdit(SourceEdit edit) {
+	        if (edit instanceof ChangeEdit) {
+	        	// change after another change
+	        	this.mergeChangeEdit((ChangeEdit)edit);
+	        } else {
+                this.mergeMoveEdit((MoveEdit)edit);
+            }
+	    }
+	}
+	
+	public static class ChangeEdit extends SourceEdit {
+		
+		public String replacement;
+		
+		public ChangeEdit(int start, int length, String replacement) {
+	        super(start, length);
+	        this.replacement = replacement;
+	    }
+	
+	    public int lengthChange() {
+	        return this.replacement.length() - this.length;
+	    }
+	
+	    protected void mergeChangeEdit(ChangeEdit edit) {
+	        if (this.isAfter(edit)) {
+	            // move this edit
+	            this.start += edit.lengthChange();
+	        } else if (this.isBefore(edit)) {
+	            // nothing to do
+	        } else {
+	            // conflict
+	            ExtensionsConfig.log("Conflicting edits"); //$NON-NLS-1$
+	        }
+	    }
+	
+	    protected void mergeMoveEdit(MoveEdit edit) {
+	        if (this.intersects(edit)) {
+	            if (!this.inside(edit)) {
+	                ExtensionsConfig.log("Change edit conflicts with move edit"); //$NON-NLS-1$
+	            }
+	            this.start += edit.positionChange();
+	        } else {
+	            if (this.start <= edit.start) {
+	                if (this.start <= edit.dest) {
+	                    // nothing to do
+	                } else {
+	                    // moved text after then before the change -> push this edit
+	                    this.start += edit.length;
+	                }
+	            } else {
+	                if (this.start >= edit.dest) {
+	                    // nothing to do
+	                } else {
+	                    // moved text before then after the change -> pull this edit
+	                    this.start -= edit.length;
+	                }
+	            }
+	        }
+	    }
+	
+	    public String applyEdit(String source) {
+	        String before = source.substring(0, this.start);
+	        String after = source.substring(this.end());
+	        return before + this.replacement + after;
+	    }
+	}
+	
+	public static class MoveEdit extends SourceEdit {
+		
+		public int dest;
+		
+	    public MoveEdit(int start, int length, int dest) {
+	        super(start, length);
+	        this.dest = dest;
+	    }
+	
+	    public int positionChange() {
+	        return this.dest - this.start;
+	    }
+	
+	    protected void mergeChangeEdit(ChangeEdit edit) {
+	        if (this.intersects(edit)) {
+	            if (!this.contains(edit)) {
+	                ExtensionsConfig.log("Move edit conflicts with change edit"); //$NON-NLS-1$
+	            }
+	        } else if (this.dest >= edit.start && this.dest <= edit.end()) {
+	            ExtensionsConfig.log("Move edit conflicts with change edit"); //$NON-NLS-1$
+	        }
+	        if (this.start >= edit.start) {
+	            this.start += (edit.lengthChange());
+	        }
+	        if (this.dest >= edit.start) {
+	            this.dest += (edit.lengthChange());
+	        }
+	    }
+	
+	    protected void mergeMoveEdit(MoveEdit edit) {
+	        if (this.intersects(edit)) {
+	            ExtensionsConfig.log("Conflicting move edits"); //$NON-NLS-1$
+	        }
+	        if (this.start <= edit.start) {
+	            if (this.start <= edit.dest) {
+	                // nothing to do
+	            } else {
+	                // moved text after then before -> push the start
+	                this.start += edit.length;
+	            }
+	        } else {
+	            if (this.start >= edit.dest) {
+	                // nothing to do
+	            } else {
+	                // moved text before then after -> pull the start
+	                this.start -= edit.length;
+	            }
+	        }
+	        if (this.dest <= edit.start) {
+	            if (this.dest <= edit.dest) {
+	                // nothing to do
+	            } else {
+	                // moved text after then before -> push the start
+	                this.dest += edit.length;
+	            }
+	        } else {
+	            if (this.dest >= edit.dest) {
+	                // nothing to do
+	            } else {
+	                // moved text before then after -> pull the start
+	                this.dest -= edit.length;
+	            }
+	        }
+	    }
+	
+	    public String applyEdit(String source) {
+	        // extract the text to move
+	        String before = source.substring(0, this.start);
+	        String text = source.substring(this.start, this.end());
+	        String after = source.substring(this.end());
+	        source = before + after;
+	
+	        int fixedDest = this.dest;
+	        if (this.dest > this.start) {
+	            // pull back the dest from the removed length
+	            fixedDest -= this.length;
+	        }
+	        
+	        // insert the text at dest
+	        before = source.substring(0, fixedDest);
+	        after = source.substring(fixedDest);	
+	        return before + text + after;
+	    }
+	}
+	
+	public static void handleReverseExtensions(CompilationUnitDeclaration unit, ICompilationUnit sourceUnit, CompilerOptions options) {
+		ArrayList<SourceEdit> edits = sourceEdits.get(asString(unit.compilationResult().fileName));
+		if (sourceUnit instanceof CompilationUnit) {
+			try {
+				CompilationUnit compilationUnit = (CompilationUnit) sourceUnit;
+				IProject project = compilationUnit.getJavaProject().getProject();				
+				IFile file = project.getWorkspace().getRoot().getFile(compilationUnit.getPath());
+				String output = asString(compilationUnit.getContents());
+				file.setContents(new ByteArrayInputStream(output.getBytes()), 0, null);
+//				file.create(new ByteArrayInputStream(output.getBytes()), true, null);
+			} catch (CoreException e) {
+				// leave alone
+			}
+		}
+	}
+	
+	public static void handleEndCodeGeneration(CompilationUnitDeclaration unit, ICompilationUnit sourceUnit, CompilerOptions options) {
+		ExtensionsConfig.log("handleEndCodeGeneration: unit: " + ExtensionsConfig.asLog(unit)); //$NON-NLS-1$
+		if (ExtensionsConfig.ReverseExtensions) {
+			handleReverseExtensions(unit, sourceUnit, options);
+		}
+	}
+	
+	public static char[] buildPackageName(char[][] packageName) {
+		int length = 0;
+		for (int i = 0; i < packageName.length; i++) {
+			if (i > 0) {
+				length += 1;		
+			}
+			length += packageName[i].length;
+		}
+		char[] result = new char[length];
+		length = 0;
+		for (int i = 0; i < packageName.length; i++) {
+			if (i > 0) {
+				result[length] = '.';
+				length += 1;				
+			}
+			System.arraycopy(packageName[i], 0, result, length, packageName[i].length);
+			length += packageName[i].length;
+		}
+		return result;
+	}
+	
+	public static char[] finishPackageName(char[] chars) {
+		char[] result = Arrays.copyOf(chars, chars.length + 1);
+		result[chars.length] = '.';
+		return result;
+	}
+	
+	public static char[] buildPackageType(char[] packageName, char[] typeName) {
+		char[] result = new char[packageName.length + typeName.length + 3];
+		int j = 0;
+		for (int i = 0; i < packageName.length; i++) result[j++] = packageName[i];
+		result[j++] = '.';
+		for (int i = 0; i < typeName.length; i++) result[j++] = typeName[i];
+		result[j++] = '.';
+		result[j++] = '*';
+		return result;
+	}
+	
+	public static String[] concatStringArrays(String[] array1, String[] array2) {
+		if (array1 == null) return array2;
+		if (array2 == null) return array1;
+		String[] result = Arrays.copyOf(array1, array1.length + array2.length);
+		System.arraycopy(array2, 0, result, array1.length, array2.length);
+		return result;
+	}
+	
+	private static String currentFileName = null;
+	private static HashMap<String, String[]> packageTypesCache = new HashMap<>();
+	
+	public static String[] getPackageTypesFromCache(CompilationUnitScope scope, char[] importName) {
+		String fileName = asString(scope.referenceContext.getFileName());		
+		if (!fileName.equals(currentFileName)) {
+			packageTypesCache.clear();
+			currentFileName = fileName;
+		}
+		return packageTypesCache.get(asString(importName));
+	}
+	
+	public static void putPackageTypesInCache(CompilationUnitScope scope, char[] importName, String[] favoriteReferences) {
+		String fileName = asString(scope.referenceContext.getFileName());	
+		if (!fileName.equals(currentFileName)) {	
+			packageTypesCache.clear();
+			currentFileName = fileName;
+		}
+		packageTypesCache.put(asString(importName), favoriteReferences);
 	}
 }

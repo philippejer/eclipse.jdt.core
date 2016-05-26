@@ -9,6 +9,8 @@ public class ExtensionsConfig {
 	
 	// Direct logging of some debug messages to the error stream (not proper Eclipse logging)
 	public static final boolean EnableLogs = false;
+	
+	public static final boolean ReverseExtensions = false;
 
 	public static void log(String message) {
 		if (!EnableLogs) return;

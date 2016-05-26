@@ -418,7 +418,7 @@ public class ForeachStatement extends Statement {
 
 	public void resolve(BlockScope upperScope) {
 		if (ExtensionsConfig.Enable) {
-			CompilerExtensions.handleVarResolveForEach(this, upperScope);
+			CompilerExtensions.handleVarForForEach(this, upperScope);
 		}
 		
 		// use the scope that will hold the init declarations
