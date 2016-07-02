@@ -4325,6 +4325,10 @@ public final class CompletionEngine
 		if(this.insideQualifiedReference && !onlyStatic && !isStatic) {
 			return R_NON_STATIC;
 		}
+		if (ExtensionsConfig.Enable && onlyStatic && isStatic) {
+//			return ExtensionsConfig.StaticImportRelevance;
+			return 0;
+		}
 		return 0;
 	}
 	
@@ -4345,7 +4349,7 @@ public final class CompletionEngine
 					if (binding != null) {
 						if (CharOperation.equals(binding.selector, method.selector)) {
 							if (binding.areParameterErasuresEqual(method)) {
-								return R_EXACT_NAME + R_METHOD_OVERIDE;
+								return R_EXACT_NAME + R_METHOD_OVERRIDE;
 							}
 							return R_EXACT_NAME;
 						}
@@ -8478,7 +8482,7 @@ public final class CompletionEngine
 			relevance += computeRelevanceForResolution();
 			relevance += computeRelevanceForInterestingProposal();
 			relevance += computeRelevanceForCaseMatching(methodName, method.selector);
-			relevance += R_METHOD_OVERIDE;
+			relevance += R_METHOD_OVERRIDE;
 			if(method.isAbstract()) relevance += R_ABSTRACT_METHOD;
 			relevance += computeRelevanceForRestrictions(IAccessRule.K_ACCESSIBLE);
 
