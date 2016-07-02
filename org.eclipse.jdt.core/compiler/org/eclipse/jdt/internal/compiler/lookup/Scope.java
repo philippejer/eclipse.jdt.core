@@ -4284,7 +4284,11 @@ public abstract class Scope {
 		// common part for all compliance levels:
 		int[] compatibilityLevels = new int[visibleSize];
 		int compatibleCount = 0;
-		for (int i = 0; i < visibleSize; i++)
+		for (int i = 0; i < visibleSize; i++) {				
+			if (ExtensionsConfig.Enable) {
+				argumentTypes = CompilerExtensions.handleSyntheticParametersForCompatibility(visible[i], argumentTypes);
+				argumentTypes = CompilerExtensions.handleOptionalParametersForCompatibility(visible[i], argumentTypes);
+			}
 			if ((compatibilityLevels[i] = parameterCompatibilityLevel(visible[i], argumentTypes, invocationSite)) != NOT_COMPATIBLE) {
 				if (i != compatibleCount) {
 					visible[compatibleCount] = visible[i];
@@ -4292,6 +4296,7 @@ public abstract class Scope {
 				}
 				compatibleCount++;
 			}
+		}
 		
 		if (compatibleCount == 0) {
 			return new ProblemMethodBinding(visible[0].selector, argumentTypes, ProblemReasons.NotFound);
@@ -4689,7 +4694,7 @@ public abstract class Scope {
 	public int parameterCompatibilityLevel(MethodBinding method, TypeBinding[] arguments) {
 		return parameterCompatibilityLevel(method, arguments, false);
 	}	
-	public int parameterCompatibilityLevel(MethodBinding method, TypeBinding[] arguments, boolean tiebreakingVarargsMethods) {
+	public int parameterCompatibilityLevel(MethodBinding method, TypeBinding[] arguments, boolean tiebreakingVarargsMethods) {			
 		TypeBinding[] parameters = method.parameters;
 		int paramLength = parameters.length;
 		int argLength = arguments.length;

@@ -91,7 +91,7 @@ import org.eclipse.jdt.internal.core.SourceMethod;
  * Big ugly class that contains all compiler extensions related code.
  * Much of the complex AST manipulation code comes from project Lombok.
  */
-public class CompilerExtensions {	
+public class CompilerExtensions {
 	
 	public static void addProblem(Scope scope, int sourceStart, int sourceEnd, String message, boolean isError) {
 		ReferenceContext referenceContext = scope.referenceContext();
@@ -405,7 +405,7 @@ public class CompilerExtensions {
 			} catch (NullPointerException e) {
 				// may happen with the selection parser (initialization not parsed)
 				ExtensionsConfig.log("Cannot resolve initialization"); //$NON-NLS-1$
-				if (ExtensionsConfig.EnableLogs) e.printStackTrace();
+				if (ExtensionsConfig.Debug) e.printStackTrace();
 				TypeReference newType = new QualifiedTypeReference(TypeConstants.JAVA_LANG_OBJECT, poss(declaration.type, 3));	
 				declaration.type = newType;
 			}
@@ -614,6 +614,7 @@ public class CompilerExtensions {
 	}
 	
 	// adds any synthetic argument types (for compatibility checks)
+	@SuppressWarnings("cast")
 	public static TypeBinding[] handleSyntheticParametersForCompatibility(MethodBinding method, TypeBinding[] arguments) {
 		method = method.original();
 		if (arguments == null) arguments = new TypeBinding[0];
@@ -840,11 +841,7 @@ public class CompilerExtensions {
 	}
 	
 	public static Expression findArgNameExpression(Expression expression, Scope scope) {
-		if (expression instanceof QualifiedNameReference) {
-			QualifiedNameReference reference = (QualifiedNameReference) expression;
-			return new SingleNameReference(reference.tokens[reference.tokens.length - 1],
-					reference.sourcePositions[reference.sourcePositions.length - 1]);
-		} else if ((expression instanceof SingleNameReference) || (expression instanceof ThisReference)) {
+		if ((expression instanceof SingleNameReference) || (expression instanceof QualifiedNameReference) || (expression instanceof ThisReference)) {
 			return expression;
 		} else if (expression instanceof Invocation) {
 			Invocation invocation = (Invocation) expression;
