@@ -436,9 +436,12 @@ public void computeConversion(Scope scope, TypeBinding runtimeTimeType, TypeBind
 public void generateCode(BlockScope currentScope, CodeStream codeStream, boolean valueRequired) {
 	if (ExtensionsConfig.Enable) {
 		if (!CompilerExtensions.handleConditionalAnnotations(this, currentScope)) {
-			Expression expression = CompilerExtensions.makeDefaultLiteral(this.resolvedType, this.sourceStart, this.sourceEnd);
-			expression.resolveType(currentScope);
-			expression.generateCode(currentScope, codeStream, valueRequired);
+			if (valueRequired) {
+				// disabled call: generate a default expression for the expected type
+				Expression expression = CompilerExtensions.makeDefaultLiteral(this.resolvedType, this.sourceStart, this.sourceEnd);
+				expression.resolveType(currentScope);
+				expression.generateCode(currentScope, codeStream, valueRequired);
+			}
 			return;
 		}
 	}
@@ -459,6 +462,12 @@ public void generateCode(BlockScope currentScope, CodeStream codeStream, boolean
 		this.receiver.generateCode(currentScope, codeStream, true);
 		if ((this.bits & NeedReceiverGenericCast) != 0) {
 			codeStream.checkcast(this.actualReceiverType);
+		}
+	}
+	if (ExtensionsConfig.Enable) {
+		if (valueRequired && !this.binding.isStatic() && this.binding.returnType.id == TypeIds.T_void) {
+			// duplicate the the top of the stack so that the first argument (receiver) is also the return value of the method
+			codeStream.dup();
 		}
 	}
 	codeStream.recordPositionsFrom(pc, this.sourceStart);
@@ -909,6 +918,12 @@ public TypeBinding resolveType(BlockScope scope) {
 	}
 	if (this.typeArguments != null && this.binding.original().typeVariables == Binding.NO_TYPE_VARIABLES) {
 		scope.problemReporter().unnecessaryTypeArgumentsForMethodInvocation(this.binding, this.genericTypeArguments, this.typeArguments);
+	}
+	if (ExtensionsConfig.Enable) {
+		if (!this.binding.isStatic() && this.binding.returnType.id == TypeIds.T_void) {
+			// cascade receiver on void method calls
+			this.resolvedType = this.actualReceiverType;
+		}
 	}
 	return (this.resolvedType.tagBits & TagBits.HasMissingType) == 0
 				? this.resolvedType
