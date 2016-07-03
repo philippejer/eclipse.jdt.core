@@ -35,6 +35,7 @@ import org.eclipse.jdt.internal.compiler.ast.ExplicitConstructorCall;
 import org.eclipse.jdt.internal.compiler.ast.Expression;
 import org.eclipse.jdt.internal.compiler.ast.FalseLiteral;
 import org.eclipse.jdt.internal.compiler.ast.FieldDeclaration;
+import org.eclipse.jdt.internal.compiler.ast.FloatLiteral;
 import org.eclipse.jdt.internal.compiler.ast.ForeachStatement;
 import org.eclipse.jdt.internal.compiler.ast.IntLiteral;
 import org.eclipse.jdt.internal.compiler.ast.Invocation;
@@ -51,6 +52,7 @@ import org.eclipse.jdt.internal.compiler.ast.SingleNameReference;
 import org.eclipse.jdt.internal.compiler.ast.SingleTypeReference;
 import org.eclipse.jdt.internal.compiler.ast.StringLiteral;
 import org.eclipse.jdt.internal.compiler.ast.ThisReference;
+import org.eclipse.jdt.internal.compiler.ast.TrueLiteral;
 import org.eclipse.jdt.internal.compiler.ast.TypeDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.TypeReference;
 import org.eclipse.jdt.internal.compiler.ast.Wildcard;
@@ -59,6 +61,7 @@ import org.eclipse.jdt.internal.compiler.env.ICompilationUnit;
 import org.eclipse.jdt.internal.compiler.impl.BooleanConstant;
 import org.eclipse.jdt.internal.compiler.impl.CompilerOptions;
 import org.eclipse.jdt.internal.compiler.impl.Constant;
+import org.eclipse.jdt.internal.compiler.impl.FloatConstant;
 import org.eclipse.jdt.internal.compiler.impl.IntConstant;
 import org.eclipse.jdt.internal.compiler.impl.ReferenceContext;
 import org.eclipse.jdt.internal.compiler.impl.StringConstant;
@@ -528,6 +531,10 @@ public class CompilerExtensions {
 	public static final char[][] CONDITIONAL_NAME = buildName(EXTENSIONS_NAME, asChars("Conditional")); //$NON-NLS-1$
 	public static final char[][] CONDITIONAL_CALLER_FIELD_NAME = buildName(EXTENSIONS_NAME, asChars("ConditionalCallerField")); //$NON-NLS-1$
 	public static final char[][] OPTIONAL_NAME = buildName(EXTENSIONS_NAME, asChars("Optional")); //$NON-NLS-1$
+	public static final char[][] OPT_INT_NAME = buildName(EXTENSIONS_NAME, asChars("OptInt")); //$NON-NLS-1$
+	public static final char[][] OPT_FLOAT_NAME = buildName(EXTENSIONS_NAME, asChars("OptFloat")); //$NON-NLS-1$
+	public static final char[][] OPT_BOOL_NAME = buildName(EXTENSIONS_NAME, asChars("OptBool")); //$NON-NLS-1$
+	public static final char[][][] OPTIONAL_NAMES = { OPTIONAL_NAME, OPT_INT_NAME, OPT_FLOAT_NAME, OPT_BOOL_NAME };
 	public static final char[][] CALLER_FILE_NAME = buildName(EXTENSIONS_NAME, asChars("CallerFile")); //$NON-NLS-1$
 	public static final char[][] CALLER_LINE_NAME = buildName(EXTENSIONS_NAME, asChars("CallerLine")); //$NON-NLS-1$
 	public static final char[][] CALLER_CLASS_NAME = buildName(EXTENSIONS_NAME, asChars("CallerClass")); //$NON-NLS-1$
@@ -556,7 +563,24 @@ public class CompilerExtensions {
 	}
 	
 	public static boolean isOptionalAnnotation(AnnotationBinding annotation) {
-		return matches(OPTIONAL_NAME, annotation.getAnnotationType().compoundName);
+		ReferenceBinding type = annotation.getAnnotationType();
+		for (int i = 0; i < OPTIONAL_NAMES.length; i++) {
+			if (matches(OPTIONAL_NAMES[i], type.compoundName))
+				return true;
+		}
+		return false;
+	}
+
+	public static boolean isOptIntAnnotation(AnnotationBinding annotation) {
+		return matches(OPT_INT_NAME, annotation.getAnnotationType().compoundName);
+	}
+
+	public static boolean isOptFloatAnnotation(AnnotationBinding annotation) {
+		return matches(OPT_FLOAT_NAME, annotation.getAnnotationType().compoundName);
+	}
+
+	public static boolean isOptBoolAnnotation(AnnotationBinding annotation) {
+		return matches(OPT_BOOL_NAME, annotation.getAnnotationType().compoundName);
 	}
 	
 	public static boolean isCallFileAnnotation(AnnotationBinding annotation) {
@@ -614,7 +638,6 @@ public class CompilerExtensions {
 	}
 	
 	// adds any synthetic argument types (for compatibility checks)
-	@SuppressWarnings("cast")
 	public static TypeBinding[] handleSyntheticParametersForCompatibility(MethodBinding method, TypeBinding[] arguments) {
 		method = method.original();
 		if (arguments == null) arguments = new TypeBinding[0];
@@ -932,6 +955,12 @@ public class CompilerExtensions {
 		return 0;
 	}
 	
+	public static float getFloatAnnotationParam(AnnotationBinding annotation, char[] name) {
+		Object value = getAnnotationParam(annotation, name);
+		if (value instanceof FloatConstant) return ((FloatConstant) value).floatValue();
+		return 0.0f;
+	}
+	
 	public static class InvocationArguments {
 		Expression[] arguments;
 		TypeBinding[] argumentTypes;
@@ -1062,6 +1091,43 @@ public class CompilerExtensions {
 			}
 		}
 	}
+
+	public static Literal makeOptIntLiteral(AnnotationBinding annotation, TypeBinding type, int s, int e) {
+		int value = getIntAnnotationParam(annotation, VALUE_NAME);
+		return IntLiteral.buildIntLiteral(asChars(Integer.toString(value)), s, e);
+	}
+
+	public static Literal makeOptFloatLiteral(AnnotationBinding annotation, TypeBinding type, int s, int e) {
+		float value = getFloatAnnotationParam(annotation, VALUE_NAME);
+		return new FloatLiteral(asChars(Float.toString(value)), s, e);
+	}
+
+	public static Literal makeOptBoolLiteral(AnnotationBinding annotation, TypeBinding type, int s, int e) {
+		boolean value = getBooleanAnnotationParam(annotation, VALUE_NAME);
+		if (value)
+			return new TrueLiteral(s, e);
+		else
+			return new FalseLiteral(s, e);
+	}
+
+	public static Literal makeOptionalLiteral(AnnotationBinding annotation, TypeBinding type, int s, int e) {
+		if (isOptIntAnnotation(annotation)) {			
+			TypeBinding intBinding = TypeBinding.INT;
+			if (intBinding.isCompatibleWith(type))
+				return makeOptIntLiteral(annotation, type, s, e);
+		}
+		else if (isOptFloatAnnotation(annotation)) {	
+			TypeBinding floatBinding = TypeBinding.FLOAT;
+			if (floatBinding.isCompatibleWith(type))
+				return makeOptFloatLiteral(annotation, type, s, e);
+		}
+		else if (isOptBoolAnnotation(annotation)) {	
+			TypeBinding booleanBinding = TypeBinding.BOOLEAN;
+			if (booleanBinding.isCompatibleWith(type))
+				return makeOptBoolLiteral(annotation, type, s, e);
+		}
+		return makeDefaultLiteral(type, s, e);
+	}
 	
 	// adds non-provided optional arguments required to invoke the method
 	public static void handleOptionalArgumentsForInvocation(Invocation invocation, InvocationArguments invocationArguments, MethodBinding method, Scope scope) {
@@ -1085,7 +1151,7 @@ public class CompilerExtensions {
 		for (int i = oldArguments.length; i < parameters.length; i++) {
 			AnnotationBinding annotation = method.optionalAnnotations[i];
 			if (annotation == null) return; // should not happen after compatibility checks
-			newArguments[i] = makeDefaultLiteral(method.parameters[i], invocation.sourceEnd(), invocation.sourceEnd());
+			newArguments[i] = makeOptionalLiteral(annotation, method.parameters[i], invocation.sourceEnd(), invocation.sourceEnd());
 			newArgumentTypes[i] = resolveType(newArguments[i], scope);
 			if (newArgumentTypes[i] == null) return; // cannot resolve a basic literal??
 		}
@@ -1116,24 +1182,29 @@ public class CompilerExtensions {
 		invocation.arguments = invocationArguments.arguments;
 		return invocationArguments.argumentTypes;
 	}
-	
+
 	public static void checkOptionalAnnotations(AbstractMethodDeclaration declaration, Scope scope) {
 		Argument[] arguments = declaration.arguments;
-		if (arguments == null) return;
+		if (arguments == null)
+			return;
 		boolean optionalAllowed = true;
 		for (int i = arguments.length - 1; i >= 0; i--) {
 			Argument argument = arguments[i];
+			TypeBinding argumentType = argument.type.resolvedType;
 			if (argument.annotations == null) {
 				optionalAllowed = false;
 				continue;
 			}
 			Annotation optionalAnnotation = null;
+		    AnnotationBinding optionalAnnotationType = null;
 			for (int j = 0; j < argument.annotations.length; j++) {
 				Annotation annotation = argument.annotations[j];
 				AnnotationBinding annotationType = annotation.getCompilerAnnotation();
-				if (annotationType == null) continue;
+				if (annotationType == null)
+					continue;
 				if (isOptionalAnnotation(annotationType)) {
 					optionalAnnotation = annotation;
+					optionalAnnotationType = annotationType;
 					break;
 				}
 			}
@@ -1142,6 +1213,25 @@ public class CompilerExtensions {
 					addProblem(scope, optionalAnnotation.sourceStart, optionalAnnotation.sourceEnd,
 							"Optional arguments must appear last", true); //$NON-NLS-1$
 					return;
+				}
+				if (isOptIntAnnotation(optionalAnnotationType)) {
+					TypeBinding intBinding = TypeBinding.INT;
+					if (!intBinding.isCompatibleWith(argumentType)) {
+						addProblem(scope, argument.type.sourceStart, argument.type.sourceEnd,
+								"type " + argumentType + " is not compatible with int", true); //$NON-NLS-1$ //$NON-NLS-2$
+					}
+				} else if (isOptFloatAnnotation(optionalAnnotationType)) {
+					TypeBinding floatBinding = TypeBinding.FLOAT;
+					if (!floatBinding.isCompatibleWith(argumentType)) {
+						addProblem(scope, argument.type.sourceStart, argument.type.sourceEnd,
+								"type " + argumentType + " is not compatible with float", true); //$NON-NLS-1$ //$NON-NLS-2$
+					}
+				} else if (isOptBoolAnnotation(optionalAnnotationType)) {
+					TypeBinding booleanBinding = TypeBinding.BOOLEAN;
+					if (!booleanBinding.isCompatibleWith(argumentType)) {
+						addProblem(scope, argument.type.sourceStart, argument.type.sourceEnd,
+								"type " + argumentType + " is not compatible with boolean", true); //$NON-NLS-1$ //$NON-NLS-2$
+					}
 				}
 			} else {
 				optionalAllowed = false;

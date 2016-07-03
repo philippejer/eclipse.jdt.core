@@ -373,7 +373,7 @@ public ConstructorPattern(
 	
 	if (ExtensionsConfig.Enable) {
 		if (CompilerExtensions.handleSyntheticOrOptionalParametersForMethodSearch(method)) {
-			// hack to bypass the check on argument count (will not yield false positives)
+			// hack to bypass the check on argument count (note: this will not induce false positives)
 			this.varargs = true;
 		}
 	}
