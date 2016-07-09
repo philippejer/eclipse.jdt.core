@@ -728,8 +728,8 @@ public class CompilerExtensions {
 			if (matches(lastChars, nameChars))
 				return true;
 		}
-		{
-			char[] lastChars = OPTIONAL_NAME[OPTIONAL_NAME.length - 1];
+		for (int i = 0; i < OPTIONAL_NAMES.length; i++) {
+			char[] lastChars = OPTIONAL_NAMES[i][OPTIONAL_NAMES[i].length - 1];
 			if (matches(lastChars, nameChars))
 				return true;
 		}
